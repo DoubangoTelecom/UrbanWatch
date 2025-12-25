@@ -1,0 +1,1 @@
+python demos/python/demo_rknn2.py --config "config/anpr_mobile.yml" --model "inference_models/rknn2_models/rk3588/anpr_detect_main_mobile.rknn.rk3588" --inputs "demos/images" --save_result --outputs "/home/garbage/anpr_demo_outs"

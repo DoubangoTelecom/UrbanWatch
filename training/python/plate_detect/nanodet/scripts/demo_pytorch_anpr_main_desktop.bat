@@ -1,0 +1,1 @@
+python demos/python/demo_pytorch.py image --config "config/anpr_desktop.yml" --model "workspace/anpr_desktop/model_best/model_best.ckpt" --path "demos/images"

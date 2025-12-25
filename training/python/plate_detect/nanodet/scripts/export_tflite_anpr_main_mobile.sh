@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=-1 python tools/export_tflite.py --output_dynamic_shape False --per_channel False --out_path anpr_detect_main_mobile.tflite --cfg_path config/anpr_mobile.yml --model_path /home/projects/urban-watch/plate_detect/nanodet/workspace/anpr_mobile/model_best/model_best.ckpt

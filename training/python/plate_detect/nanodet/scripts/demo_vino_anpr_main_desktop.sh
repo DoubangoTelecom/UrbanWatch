@@ -1,0 +1,1 @@
+python demos/python/demo_vino.py --config "config/anpr_desktop.yml" --model "anpr_detect_main_desktop.vino/model.xml" --inputs "demos/images" --save_result --outputs "/home/garbage/anpr_demo_outs"

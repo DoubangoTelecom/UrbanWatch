@@ -1,0 +1,1 @@
+python demos/python/demo_onnx.py --config "config/anpr_desktop.yml" --model "inference_models/anpr_detect_main_desktop.onnx" --inputs "demos/images" --save_result --outputs "garbage/results"

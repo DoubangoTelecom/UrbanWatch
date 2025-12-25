@@ -1,0 +1,1 @@
+python tools/calib_build.py --num_images 20000 --image_size 352 --in_folder datasets/anpr_main/coco/train2017 --out_folder datasets/anpr_main/calibration

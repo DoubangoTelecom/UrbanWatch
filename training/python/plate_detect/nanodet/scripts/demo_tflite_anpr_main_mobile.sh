@@ -1,0 +1,1 @@
+LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH VIV_VX_DEBUG_LEVEL=0 VIV_VX_PROFILE=0 python demos/python/demo_tflite.py --config "config/anpr_mobile.yml" --model "inference_models/anpr_detect_main_mobile.tflite" --inputs "demos/images" --save_result --outputs "/home/garbage/anpr_demo_outs"
