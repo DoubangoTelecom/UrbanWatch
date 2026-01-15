@@ -58,8 +58,11 @@ def main():
     for i, path in enumerate(files):
         print('[{:3d}/{:3d}] Processing {}...'.format(i, len(files), path))
         # Load image without preprocessing or transpose
-        # RKNN needs NHWC/UINT8 as input
-        meta = load_image(path, cfg, preprocess=False)        
+        # RKNN needs NHWC as input
+        # Both UINT8 and FLOAT32 are accepted but we noticed that UINT8 is faster. License plate detection (main):
+        #   - UINT8: 4 milliseconds
+        #   - FLOAT32: 8 milliseconds
+        meta = load_image(path, cfg, preprocess=False)       
         # Inference (needs 'nhwc', otherwise get warning suggesting transpose done by the engine)
         start = time.time()
         preds = rknn_lite.inference(inputs=[meta['numpy_img'][0][None,...]], data_format=['nhwc'])

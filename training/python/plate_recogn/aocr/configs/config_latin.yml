@@ -1,0 +1,72 @@
+model:
+  name: anpr_latin
+  max_len: 11 # maximum characters in a plate
+  alphabet: AF2KL017MN3456GHTUVWXB89CDEYZIJOPQRS
+  imgH: 112 # image height
+  imgW: 112 # image width
+  grayscale: True # grayscale (1 channel) or RGB (3 channels)
+  stn_type: 'tps' # 'tsp' or 'affine'
+  stn_tps_num_points: 20
+  padding: False # whether to keep ratio then pad for image resize
+  normalize: [127.5, 127.5] # [mean, std]
+  projection_dropout: 0.1 # CTC projection
+  mnv4: # MobileNetV4 backbone
+    block_size: medium
+    width_mult: 1.0
+    out_stage: 3
+  cct: # Compact Transformers
+    seq_pool: True
+    dropout: 0.1
+    attention_dropout: 0.1
+    stochastic_depth: 0.1
+    num_layers: 4
+    num_heads: 1 # multihead (>1) is not npu-friendly
+    mlp_ratio: 4.0
+    positional_embedding: learnable
+
+train:
+  dataset: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd # path to training dataset
+  batch_size: 400 # input batch size
+  workers: 0 # number of data loading workers
+  num_iter: 300000 # number of iterations to train for
+  grad_clip: 5.0 # gradient clipping value, set to <=0 to disable
+  loss:
+    focal_ctc:
+      alpha: 0.25
+      gamma: 2.0
+      blank: 0
+  optimizer: 
+    name: "adadelta" # adadelta or adam
+    adadelta:
+      lr: 1.0
+      rho: 0.95 # decay rate rho for Adadelta
+      eps: 1.0e-8
+    adam:
+      lr: 0.001
+      beta1: 0.9
+
+val:
+  dataset: /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd # path to validation dataset
+  interval: 10 # interval between each validation
+
+augment:
+  enabled: True
+  warp:
+    perspective: 0.0 # factor (must be 0 for now)
+    scale: [0.6, 1.4] # ratio
+    stretch: [[0.8, 1.2], [0.8, 1.2]] # ratio
+    rotation: 20 # degrees
+    shear: 10 # degrees
+    translate: 0.2 # ration
+    flip: 0.0 # probability
+  texture:
+    gaussian_blur: [0.0, 2.0]
+    multiply: [0.5, 1.2]
+    multiply_hue: [0.5, 1.2]
+    multiply_saturation: [0.5, 1.2]
+    gamma_contrast: [0.5, 2.0]
+    additive_gaussian_noise: 5.0
+    salt: 0.02
+    pepper: 0.02
+
+manualSeed: 1111 # for random seed setting

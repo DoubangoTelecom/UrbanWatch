@@ -20,6 +20,7 @@ from .ghostnet import GhostNet
 from .ghostnet_lite import GhostNetLite
 from .mobilenetv2 import MobileNetV2
 from .mobilenetv4 import MobileNetV4
+from .mobilevitv2 import MobileViTv2
 from .repvgg import RepVGG
 from .resnet import ResNet
 from .shufflenetv2 import ShuffleNetV2
@@ -41,6 +42,8 @@ def build_backbone(cfg):
         return MobileNetV2(**backbone_cfg)
     elif name == "MobileNetV4":
         return MobileNetV4(**backbone_cfg)
+    elif name == "MobileViTv2":
+        return MobileViTv2(**backbone_cfg)
     elif name == "EfficientNetLite":
         return EfficientNetLite(**backbone_cfg)
     elif name == "CustomCspNet":

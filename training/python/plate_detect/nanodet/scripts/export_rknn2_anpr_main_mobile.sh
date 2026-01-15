@@ -3,6 +3,7 @@ CUDA_VISIBLE_DEVICES=-1 python tools/export_rknn2.py \
     --target main_mobile \
     --output_dynamic_shape False \
     --per_channel True \
+    --quantized_algorithm normal \
     --out_folder rknn2_models \
     --calibration_dataset datasets/anpr_main/calibration/dataset.txt \
     --cfg_path config/anpr_mobile.yml \

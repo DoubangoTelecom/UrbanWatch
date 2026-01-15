@@ -54,6 +54,7 @@ def main(config, model_path, output_path, input_shape, output_dynamic_shape=Fals
         verbose=True,
         keep_initializers_as_inputs=True,
         opset_version=11,
+        external_data=False,
         input_names=["input"],
         output_names=["output"],
         dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} } if output_dynamic_shape else None,

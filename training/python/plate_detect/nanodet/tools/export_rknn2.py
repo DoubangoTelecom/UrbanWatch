@@ -27,6 +27,7 @@ def parse_args():
     )
     parser.add_argument("--output_dynamic_shape", required=False, default=False, help="Whether to enable dynamic shape for the output.")
     parser.add_argument("--per_channel", required=False, default=True, help="Whether to perform per channel quantization.")
+    parser.add_argument("--quantized_algorithm", required=False, default='normal', help="Quantized algorithm.") # FIXME(dmi): 'mmse' hangs
     return parser.parse_args() 
            
 def main(cfg, args):
@@ -88,7 +89,8 @@ def main(cfg, args):
             std_values=cfg.data.val.pipeline.normalize[1],
             quant_img_RGB2BGR=False, 
             optimization_level=args.optimization_level,
-            quantized_method={'True': 'channel', 'False': 'layer'}[args.per_channel]
+            quantized_method={'True': 'channel', 'False': 'layer'}[args.per_channel],
+            quantized_algorithm=args.quantized_algorithm
         )
         print('Loading ONNX model...')
         ret = rknn.load_onnx(model=onnx_model_path)

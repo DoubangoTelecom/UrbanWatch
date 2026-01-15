@@ -1,0 +1,180 @@
+------------ Options -------------
+exp_name: anpr_latin_mobile
+train_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+valid_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd
+manualSeed: 1111
+workers: 0
+batch_size: 800
+num_iter: 3000000
+valInterval: 10
+saved_model: 
+FT: False
+adam: True
+lr: 0.001
+beta1: 0.9
+rho: 0.95
+eps: 1e-08
+grad_clip: 5.0
+baiduCTC: False
+select_data: ['/']
+batch_ratio: ['1']
+total_data_usage_ratio: 1.0
+batch_max_length: 11
+imgH: 112
+imgW: 112
+rgb: False
+character: AF2KL017MN3456GHTUVWXB89CDEYZIJOPQRS
+sensitive: True
+PAD: False
+data_augment: True
+data_filtering_off: True
+Transformation: Affine
+FeatureExtraction: VGG
+SequenceModeling: None
+Prediction: CTC
+num_fiducial: 20
+input_channel: 1
+output_channel: 160
+hidden_size: 256
+npu_friendly: True
+num_gpu: 2
+num_class: 37
+---------------------------------------
+------------ Options -------------
+exp_name: anpr_latin_mobile
+train_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+valid_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd
+manualSeed: 1111
+workers: 0
+batch_size: 800
+num_iter: 3000000
+valInterval: 10
+saved_model: 
+FT: False
+adam: True
+lr: 0.001
+beta1: 0.9
+rho: 0.95
+eps: 1e-08
+grad_clip: 5.0
+baiduCTC: False
+select_data: ['/']
+batch_ratio: ['1']
+total_data_usage_ratio: 1.0
+batch_max_length: 11
+imgH: 112
+imgW: 112
+rgb: False
+character: AF2KL017MN3456GHTUVWXB89CDEYZIJOPQRS
+sensitive: True
+PAD: False
+data_augment: True
+data_filtering_off: True
+Transformation: Affine
+FeatureExtraction: VGG
+SequenceModeling: None
+Prediction: CTC
+num_fiducial: 20
+input_channel: 1
+output_channel: 160
+hidden_size: 256
+npu_friendly: True
+num_gpu: 2
+num_class: 37
+---------------------------------------
+------------ Options -------------
+exp_name: anpr_latin_mobile
+train_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+valid_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd
+manualSeed: 1111
+workers: 0
+batch_size: 800
+num_iter: 3000000
+valInterval: 10
+saved_model: /home/urban-watch/plate_recogn/aocr/saved_models/anpr_latin_mobile/best_accuracy.pth
+FT: False
+adam: True
+lr: 0.001
+beta1: 0.9
+rho: 0.95
+eps: 1e-08
+grad_clip: 5.0
+baiduCTC: False
+select_data: ['/']
+batch_ratio: ['1']
+total_data_usage_ratio: 1.0
+batch_max_length: 11
+imgH: 112
+imgW: 112
+rgb: False
+character: AF2KL017MN3456GHTUVWXB89CDEYZIJOPQRS
+sensitive: True
+PAD: False
+data_augment: True
+data_filtering_off: True
+Transformation: Affine
+FeatureExtraction: VGG
+SequenceModeling: None
+Prediction: CTC
+num_fiducial: 20
+input_channel: 1
+output_channel: 160
+hidden_size: 256
+npu_friendly: True
+num_gpu: 2
+num_class: 37
+---------------------------------------
+------------ Options -------------
+exp_name: anpr_latin_mobile
+train_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+valid_data: /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd
+manualSeed: 1111
+workers: 0
+batch_size: 800
+num_iter: 3000000
+valInterval: 10
+saved_model: /home/urban-watch/plate_recogn/aocr/saved_models/anpr_latin_mobile/best_accuracy.pth
+FT: False
+adam: False
+lr: 1.0
+beta1: 0.9
+rho: 0.95
+eps: 1e-08
+grad_clip: 5.0
+baiduCTC: False
+select_data: ['/']
+batch_ratio: ['1']
+total_data_usage_ratio: 1.0
+batch_max_length: 11
+imgH: 112
+imgW: 112
+rgb: False
+character: AF2KL017MN3456GHTUVWXB89CDEYZIJOPQRS
+sensitive: True
+PAD: False
+data_augment: True
+data_filtering_off: True
+Transformation: Affine
+FeatureExtraction: VGG
+SequenceModeling: None
+Prediction: CTC
+num_fiducial: 20
+input_channel: 1
+output_channel: 160
+hidden_size: 256
+npu_friendly: True
+num_gpu: 2
+num_class: 37
+---------------------------------------
+------------ Options -------------
+config: configs/config_latin.yml
+---------------------------------------
+------------ Options -------------
+config: configs/config_latin.yml
+---------------------------------------
+------------ Options -------------
+config: configs/config_latin.yml
+---------------------------------------
+------------ Options -------------
+config: configs/config_latin.yml
+---------------------------------------

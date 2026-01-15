@@ -1,0 +1,211 @@
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+opt.select_data: ['/']
+opt.batch_ratio: ['1']
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 86148
+num total samples of /: 86148 x 1.0 (total_data_usage_ratio) = 86148
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9540
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+opt.select_data: ['/']
+opt.batch_ratio: ['1']
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 86148
+num total samples of /: 86148 x 1.0 (total_data_usage_ratio) = 86148
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9540
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+opt.select_data: ['/']
+opt.batch_ratio: ['1']
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 86148
+num total samples of /: 86148 x 1.0 (total_data_usage_ratio) = 86148
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9540
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+opt.select_data: ['/']
+opt.batch_ratio: ['1']
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 86148
+num total samples of /: 86148 x 1.0 (total_data_usage_ratio) = 86148
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9540
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: /
+batch_ratio: 1
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+dataset_root: /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd
+select_data: ['/']
+batch_ratio: [1]
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/train.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 89070
+num total samples of /: 89070 x 1.0 (total_data_usage_ratio) = 89070
+num samples of / per batch: 800 x 1.0 (batch_ratio) = 800
+--------------------------------------------------------------------------------
+Total_batch_size: 800 = 800
+--------------------------------------------------------------------------------
+dataset_root:    /home/urban-watch/plate_recogn/aocr/datasets/latin/val.lmbd	 dataset: /
+sub-directory:	/.	 num samples: 9963
+--------------------------------------------------------------------------------

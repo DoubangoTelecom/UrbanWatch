@@ -1,4 +1,4 @@
-import argparse, os, onnxruntime as rt, cv2
+import argparse, os, onnxruntime as rt, cv2, time
 from demo_utils import get_image_list, load_image
 import torch
 from nanodet.model.head import build_head
@@ -56,7 +56,10 @@ def main():
         # Pre-process and build meta
         meta = load_image(path, cfg)
         # Inference
+        start = time.time()
         preds = sess.run(None, {input_name: meta['numpy_img']})
+        duration = time.time() - start
+        print('Inference time: {} ms'.format(round(duration * 1000)))
         assert len(preds) == 1, 'We expect a single output'
         # Post-processing
         results = head.post_process(torch.from_numpy(preds[0]), meta)

@@ -247,6 +247,8 @@ class MobileNetV4(nn.Module):
             'large': block_specs_large,
         }[block_size]
         
+        print("model size is ", block_size, " and model width is ", width_mult)
+        
         c = 3 # channels for input image
         self.stages = []
         out_channels_fn = lambda chan: int(chan * width_mult)
