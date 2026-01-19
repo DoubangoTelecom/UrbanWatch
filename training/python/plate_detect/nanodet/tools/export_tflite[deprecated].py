@@ -1,3 +1,4 @@
+# Deprecated: "ai_edge_torch" doesn't support batch size > 1
 import torch, argparse, os, numpy as np
 from PIL import Image
 from nanodet.model.arch import build_model

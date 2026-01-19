@@ -3,6 +3,8 @@ from rknn.api import RKNN
 from nanodet.model.arch import build_model
 from nanodet.util import Logger, cfg, load_config, load_model_weight
 
+BATCH_SIZE = 2
+
 def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -14,7 +16,7 @@ def parse_args():
         "--model_path", type=str, required=True, help="Path to .ckpt model."
     )
     parser.add_argument(
-        "--calibration_dataset", type=str, required=True, help="TXT file listing images to use for calibration"
+        "--calibration_dataset", type=str, required=True, help="TXT file listing images to use for calibration. Built using 'tools/calib_build.py'"
     )
     parser.add_argument(
         "--out_folder", type=str, default="rknn_models", help="Onnx model output path."
@@ -25,7 +27,6 @@ def parse_args():
     parser.add_argument(
         "--optimization_level", type=int, default=3, help="Optimization level [0-3]."
     )
-    parser.add_argument("--output_dynamic_shape", required=False, default=False, help="Whether to enable dynamic shape for the output.")
     parser.add_argument("--per_channel", required=False, default=True, help="Whether to perform per channel quantization.")
     parser.add_argument("--quantized_algorithm", required=False, default='normal', help="Quantized algorithm.") # FIXME(dmi): 'mmse' hangs
     return parser.parse_args() 
@@ -43,18 +44,9 @@ def main(cfg, args):
         from nanodet.model.backbone.repvgg import repvgg_det_model_convert
 
         model = repvgg_det_model_convert(model, deploy_model)
-    
-    # Dynamic shape doesn't work. The batch size (B)
-    # is lost somewhere and the output will always
-    # has B=1
-    output_dynamic_shape = (args.output_dynamic_shape=='True')
-    assert not output_dynamic_shape, 'Dynamic shape not supported'
         
     # Dummy input
-    sample_args = (torch.randn(1, 3, *cfg.data.val.input_size), )
-
-    # Dummy input
-    sample_args = (torch.randn(1, 3, cfg.data.val.input_size[0], cfg.data.val.input_size[1]), )
+    sample_args = (torch.randn(BATCH_SIZE, 3, *cfg.data.val.input_size), )
     
     # Create output folder
     if not os.path.exists(args.out_folder):
@@ -72,7 +64,7 @@ def main(cfg, args):
         opset_version=18, # OpeSet 11 cause warnings
         input_names=["input"],
         output_names=["output"],
-        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} } if output_dynamic_shape else None,
+        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} },
     )
     onnx_model_simplified, flag = onnxsim.simplify(onnx_model_path)
     assert flag, 'Failed to simplify the ONNX model'

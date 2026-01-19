@@ -17,6 +17,8 @@ import torch, argparse, onnxsim, onnx, os
 from nanodet.model.arch import build_model
 from nanodet.util import Logger, cfg, load_config, load_model_weight
 
+BATCH_SIZE = 2 # set to >1 to for batching
+
 def generate_ouput_names(head_cfg):
     cls_names, dis_names = [], []
     for stride in head_cfg.strides:
@@ -27,7 +29,7 @@ def generate_ouput_names(head_cfg):
 
 def main(config, model_path, output_path, input_shape, output_dynamic_shape=False):
     logger = Logger(-1, config.save_dir, False)
-    model = build_model(config.model)
+    model = build_model(config.model).eval()
     checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage, weights_only=False)
     load_model_weight(model, checkpoint, logger)
     if config.model.arch.backbone.name == "RepVGG":
@@ -39,25 +41,18 @@ def main(config, model_path, output_path, input_shape, output_dynamic_shape=Fals
         model = repvgg_det_model_convert(model, deploy_model)
         
     dummy_input = torch.autograd.Variable(
-        torch.randn(1, 3, input_shape[0], input_shape[1])
+        torch.randn(BATCH_SIZE, 3, input_shape[0], input_shape[1])
     )
-
-    # Dynamic shape doesn't work. The batch size (B)
-    # is lost somewhere and the output will always
-    # has B=1
-    assert not output_dynamic_shape, 'Dynamic shape not supported'
     
     torch.onnx.export(
         model,
         dummy_input,
         output_path,
         verbose=True,
-        keep_initializers_as_inputs=True,
         opset_version=11,
-        external_data=False,
         input_names=["input"],
         output_names=["output"],
-        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} } if output_dynamic_shape else None,
+        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} },
     )
     logger.log("finished exporting onnx ")
 
