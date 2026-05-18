@@ -28,7 +28,6 @@ def parse_args():
     return args
 
 def main():  
-    print('Run this demo on [vino] conda env on RTX4060 machine')
     # Parse arguments
     args = parse_args()
     # Load config
@@ -42,7 +41,7 @@ def main():
     model = core.read_model(args.model)
     input_layer = model.input(0)
     print(f"input precision: {input_layer.element_type}")
-    print(f"input shape: {input_layer.shape}")
+    print(f"input_layer: {input_layer}")
     
     # Compile for CPU
     compiled_model = core.compile_model(model=model, device_name=args.device_name)
@@ -61,7 +60,7 @@ def main():
         print('[{:3d}/{:3d}]Processing {}...'.format(i, len(files), path))
         # Pre-process and build meta
         meta = load_image(path, cfg)
-        # Inference
+        # Inference (float32, nchw)
         preds = compiled_model([meta['numpy_img']])
         assert len(preds) == 1, 'We expect a single output'
         # Post-processing
@@ -71,7 +70,7 @@ def main():
             meta["raw_img"][0], results[0], cfg.class_names, score_thres=0.35, show=args.show_result
         )
         if args.save_result:
-            assert(not args.outputs is None, 'Path to --outputs folder must be defined when --save_result is set')
+            assert not args.outputs is None, 'Path to --outputs folder must be defined when --save_result is set'
             save_path =  os.path.join(args.outputs, os.path.basename(path))
             cv2.imwrite(save_path, result_img)       
             print('Result saved at {}'.format(save_path)) 
@@ -81,4 +80,5 @@ def main():
                 break 
 
 if __name__ == "__main__":
+    print('Run this demo on [vino] conda env on RTX4060 machine')
     main()

@@ -20,8 +20,9 @@ def preprocess_image(image :Image, cfg) -> np.ndarray:
     std = np.array(mean_std[1], dtype=np.float32).reshape(1, 1, 3) / 255.0
     return ((img.astype(np.float32)/255.0 - mean) / std).astype(np.float32)
 
-def load_image_then_preprocess(path: str, cfg):
+def load_image_then_preprocess(path: str, cfg, channel_first :bool=True):
     img = Image.open(path).convert('RGB')
     image = preprocess_image(img, cfg)
-    image = image.transpose((2, 0, 1))[None,...]
-    return image
+    if channel_first:
+        image = image.transpose((2, 0, 1)) # nhwc ->  nchw
+    return image[None,...]

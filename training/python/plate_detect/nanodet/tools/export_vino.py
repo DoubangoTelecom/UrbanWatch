@@ -5,6 +5,9 @@ from nanodet.data.dataset import build_dataset
 from nanodet.util import Logger, cfg, load_config, load_model_weight
 from export_utils import get_image_list, preprocess_image
 
+BATCH_SIZE = 2 # set to >1 to make it batchy
+ONNX_FILE = '____model___.onnx'
+
 def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -20,10 +23,9 @@ def parse_args():
     parser.add_argument(
         "--input_shape", type=str, default=None, help="Model intput shape."
     )
-    parser.add_argument("--output_dynamic_shape", required=False, default=False, help="Whether to enable dynamic shape for the output.")
     return parser.parse_args() 
            
-def main(cfg, model_path, out_path, input_shape, output_dynamic_shape=False):
+def main(cfg, model_path, out_path, input_shape):
     logger = Logger(-1, cfg.save_dir, False)
     model = build_model(cfg.model)
     checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage, weights_only=False)
@@ -35,11 +37,6 @@ def main(cfg, model_path, out_path, input_shape, output_dynamic_shape=False):
         from nanodet.model.backbone.repvgg import repvgg_det_model_convert
 
         model = repvgg_det_model_convert(model, deploy_model)
-    
-    # Dynamic shape doesn't work. The batch size (B)
-    # is lost somewhere and the output will always
-    # has B=1
-    assert not output_dynamic_shape, 'Dynamic shape not supported'
         
     # Dummy input
     sample_args = (torch.randn(1, 3, *input_shape), )
@@ -47,7 +44,7 @@ def main(cfg, model_path, out_path, input_shape, output_dynamic_shape=False):
     # https://github.com/openvinotoolkit/nncf
 
     # Dummy input
-    sample_args = (torch.randn(1, 3, cfg.data.val.input_size[0], cfg.data.val.input_size[1]), )
+    sample_args = (torch.randn(BATCH_SIZE, 3, cfg.data.val.input_size[0], cfg.data.val.input_size[1]), )
     
     # We have issues quantizing the pytorch model directly to OpenVINO.
     # That's why we convert it to OpenVINO without quantization, then
@@ -56,20 +53,23 @@ def main(cfg, model_path, out_path, input_shape, output_dynamic_shape=False):
         # Got AttributeError: module 'openvino' has no attribute 'Node'. Did you mean: 'Model'?
         ov_model = ov.convert_model(model.eval(), example_input=sample_args)
     else:
+        if os.path.exists(ONNX_FILE):
+            os.remove(ONNX_FILE)
+        
         torch.onnx.export(
             model.eval(),
             sample_args,
-            '____model___.onnx',
+            ONNX_FILE,
             verbose=False,
             keep_initializers_as_inputs=True,
             opset_version=18, # OpeSet 11 cause warnings
             input_names=["input"],
             output_names=["output"],
-            dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} } if output_dynamic_shape else None,
+            dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'} },
         )
-        ov_model, flag = onnxsim.simplify('____model___.onnx')
-        os.remove('____model___.onnx')
-        os.remove('____model___.onnx.data')
+        ov_model, flag = onnxsim.simplify(ONNX_FILE)
+        os.remove(ONNX_FILE)
+        os.remove('{}.data'.format(ONNX_FILE))
         assert flag, 'Failed to simplify the ONNX model'
         
         input_name = ov_model.graph.input[0].name
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         assert len(input_shape) == 2
     if model_path is None:
         model_path = os.path.join(cfg.save_dir, "model_best/model_best.ckpt")
-    main(cfg, model_path, out_path, input_shape, args.output_dynamic_shape=='True')
+    main(cfg, model_path, out_path, input_shape)
     print("Model saved to:", out_path)
     
     

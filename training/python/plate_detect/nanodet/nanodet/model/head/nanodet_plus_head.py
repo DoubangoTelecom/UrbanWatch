@@ -144,7 +144,7 @@ class NanoDetPlusHead(nn.Module):
             for conv in cls_convs:
                 feat = conv(feat)
             output = gfl_cls(feat)
-            outputs.append(output.flatten(start_dim=2))
+            outputs.append(output.reshape((-1, output.shape[1], output.shape[2]*output.shape[3]))) #outputs.append(output.flatten(start_dim=2)) -> not batchy
         outputs = torch.cat(outputs, dim=2).permute(0, 2, 1)
         return outputs
 

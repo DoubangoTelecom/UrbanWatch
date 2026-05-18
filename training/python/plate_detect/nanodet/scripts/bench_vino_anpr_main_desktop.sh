@@ -1,0 +1,1 @@
+benchmark_app -m inference_models/anpr_detect_main_desktop.vino/model.xml -d CPU -ip f32 -nstreams 1 -api sync -hint none -b 1 

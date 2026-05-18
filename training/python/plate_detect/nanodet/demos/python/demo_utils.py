@@ -22,10 +22,11 @@ def preprocess_image(image :Image, cfg) -> np.ndarray:
     std = np.array(mean_std[1], dtype=np.float32).reshape(1, 1, 3) / 255.0
     return ((img.astype(np.float32)/255.0 - mean) / std).astype(np.float32)
 
-def load_image(path: str, cfg, preprocess=True):
+def load_image(path: str, cfg, preprocess=True, channel_first :bool=True):
     img = Image.open(path).convert('RGB')
     image = preprocess_image(img, cfg)
-    image = image.transpose((2, 0, 1))
+    if channel_first:
+        image = image.transpose((2, 0, 1)) # nhwc ->  nchw
     input_img = image if preprocess else np.array(img.resize(cfg.data.val.input_size, Image.BILINEAR))
     img_info = {
         "id": 0,

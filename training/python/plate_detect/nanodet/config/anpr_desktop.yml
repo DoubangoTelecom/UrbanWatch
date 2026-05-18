@@ -6,7 +6,7 @@ model:
     decay: 0.9998
   arch:
     name: NanoDetPlus
-    detach_epoch: 100
+    detach_epoch: 200
     backbone:
       name: MobileNetV4
       block_size: small
@@ -33,7 +33,7 @@ model:
       kernel_size: 5
       strides: [8, 16, 32, 64]
       activation: LeakyReLU
-      reg_max: 9
+      reg_max: 7
       norm_cfg:
         type: BN
       loss:
@@ -57,7 +57,7 @@ model:
       stacked_convs: 4
       strides: [8, 16, 32, 64]
       activation: LeakyReLU
-      reg_max: 9
+      reg_max: 7
 data:
   train:
     name: CocoDataset
@@ -114,7 +114,7 @@ schedule:
     name: linear
     steps: 500
     ratio: 0.0001
-  total_epochs: 300
+  total_epochs: 600
   lr_schedule:
     name: CosineAnnealingLR
     T_max: 300

@@ -1,4 +1,4 @@
-import os, argparse, random, shutil
+import os, argparse, random, shutil, numpy as np
 from export_utils import get_image_list
 from PIL import Image
 
@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser.add_argument("--out_folder", type=str, required=True, help="Output folder")
     parser.add_argument("--image_size", type=int, required=True, help="Image size")
     parser.add_argument("--num_images", type=int, required=False, default=15000, help="Image size")
-    args = parser.parse_args() 
+    args = parser.parse_args()
     
     # Re-create the output folder
     if os.path.exists(args.out_folder):
@@ -24,15 +24,21 @@ if __name__ == "__main__":
     random.shuffle(paths)
     if len(paths) > args.num_images:
         paths = paths[:args.num_images]
-    dataset_path = os.path.join(args.out_folder, 'dataset.txt')
-    with open(dataset_path, "w") as f:
+    
+    dataset_paths = os.path.join(args.out_folder, 'dataset.txt') # for RKNN
+    dataset_hailo_folder = os.path.join(args.out_folder, 'hailo') # for Hailo
+    os.makedirs(dataset_hailo_folder)
+    with open(dataset_paths, "w") as f:
         for i, path in enumerate(paths):
             print('[{:3d}/{:3d}] Processing {}...'.format(i, len(paths), path))
-            Image.open(path) \
-            .convert('RGB') \
-            .resize((args.image_size, args.image_size), Image.BILINEAR) \
-            .save(os.path.join(args.out_folder, os.path.basename(path)))
+            dst_path = os.path.join(args.out_folder, os.path.basename(path))
+            image = Image.open(path) \
+                .convert('RGB') \
+                .resize((args.image_size, args.image_size), Image.BILINEAR)
+            image.save(dst_path)
+            np.save(f"{dst_path.split('.')[0]}.npy", np.asarray(image).astype(np.float32))
             f.write(f"{os.path.basename(path)}\n")
+
         
     print('!!! DONE !!!')
     

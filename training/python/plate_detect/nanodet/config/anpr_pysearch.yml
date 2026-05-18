@@ -8,7 +8,7 @@ model:
     decay: 0.9998
   arch:
     name: NanoDetPlus
-    detach_epoch: 200
+    detach_epoch: 500
     backbone:
       name: MobileNetV4
       block_size: small
@@ -28,14 +28,14 @@ model:
         mode: 'nearest'
     head:
       name: NanoDetPlusHead
-      num_classes: 2
+      num_classes: 1
       input_channel: 96
       feat_channels: 96
       stacked_convs: 2
       kernel_size: 5
       strides: [8, 16, 32, 64]
       activation: ReLU
-      reg_max: 9
+      reg_max: 7
       norm_cfg:
         type: BN
       loss:
@@ -53,18 +53,18 @@ model:
     # Auxiliary head, only use in training time.
     aux_head:
       name: SimpleConvHead
-      num_classes: 2
+      num_classes: 1
       input_channel: 192
       feat_channels: 192
       stacked_convs: 4
       strides: [8, 16, 32, 64]
       activation: LeakyReLU
-      reg_max: 9
+      reg_max: 7
 data:
   train:
     name: CocoDataset
-    img_path: datasets/anpr_main/coco/train2017
-    ann_path: datasets/anpr_main/coco/annotations/instances_train.json
+    img_path: datasets/anpr_pysearch/coco/train2017
+    ann_path: datasets/anpr_pysearch/coco/annotations/instances_train.json
     input_size: [224,224] #[w,h]
     keep_ratio: False
     pipeline:
@@ -94,8 +94,8 @@ data:
       normalize: [[123.675, 116.28, 103.53], [58.395, 57.12, 57.375]]
   val:
     name: CocoDataset
-    img_path: datasets/anpr_main/coco/val2017
-    ann_path: datasets/anpr_main/coco/annotations/instances_val.json
+    img_path: datasets/anpr_pysearch/coco/val2017
+    ann_path: datasets/anpr_pysearch/coco/annotations/instances_val.json
     input_size: [224,224] #[w,h]
     keep_ratio: False
     pipeline:
@@ -103,7 +103,7 @@ data:
 device:
   gpu_ids: [0,1]
   workers_per_gpu: 32
-  batchsize_per_gpu: 200
+  batchsize_per_gpu: 250
   precision: 32 # set to 16 to use AMP training
 schedule:
   #resume:
@@ -116,7 +116,7 @@ schedule:
     name: linear
     steps: 500
     ratio: 0.0001
-  total_epochs: 400
+  total_epochs: 1000
   lr_schedule:
     name: CosineAnnealingLR
     T_max: 300
