@@ -48,7 +48,7 @@ def main(config, model_path, output_path, input_shape, output_dynamic_shape=Fals
         model,
         dummy_input,
         output_path,
-        verbose=True,
+        verbose=False,
         opset_version=11,
         input_names=["input"],
         output_names=["output"],
