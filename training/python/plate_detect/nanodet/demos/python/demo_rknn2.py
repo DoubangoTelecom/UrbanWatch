@@ -1,7 +1,6 @@
 import argparse, os, cv2, torch, time
 from rknnlite.api import RKNNLite
 from demo_utils import get_image_list, load_image
-from PIL import Image
 from nanodet.model.head import build_head
 from nanodet.util import cfg, load_config
 

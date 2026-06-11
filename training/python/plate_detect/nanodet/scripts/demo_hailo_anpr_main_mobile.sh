@@ -1,0 +1,1 @@
+python demos/python/demo_hailo.py --config "config/anpr_mobile.yml" --model "inference_models/hailo_models/hailo8l/anpr_detect_main_mobile.hailo8l" --inputs "demos/images" --save_result --outputs "/home/garbage/anpr_demo_outs"
