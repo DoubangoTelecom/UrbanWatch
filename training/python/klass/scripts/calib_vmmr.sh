@@ -1,0 +1,1 @@
+python tools/calib_build.py --num_images 30000 --kar --image_size 224 --in_folder datasets/vmmr --out_folder datasets/vmmr/calibration

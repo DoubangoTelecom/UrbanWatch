@@ -1,0 +1,1 @@
+python tools/calib_build.py --num_images 30000 --no-kar --image_size 128 --in_folder datasets/vcr --out_folder datasets/vcr/calibration

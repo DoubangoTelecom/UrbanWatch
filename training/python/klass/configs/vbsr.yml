@@ -1,0 +1,67 @@
+model:
+  name: vbsr
+  num_classes: 12
+  dropout: 0.1
+  imgH: 224
+  imgW: 224
+  imgKar: True # Keep Aspect Ratio
+  chroma: rgb # lxy, rgb, gray...
+  normalize: [127.5, 127.5] # [mean, std]
+  backbone:
+    MobileNetV4:
+      input_channels: 3
+      block_size: "medium"
+      width_mult: 1.0
+      out_stage: 5
+      activation: "ReLU"
+
+datasets:
+  train: /home/urban-watch/klass/datasets/vbsr/imgs_train
+  val: /home/urban-watch/klass/datasets/vbsr/imgs_val
+
+train:
+  batch_size: 150 # input batch size
+  workers: 16 # number of data loading workers
+  epochs: 300000 # number of epochs to train for
+  grad_clip: 0
+  loss: # focal loss
+    alpha: 1.0
+    gamma: 2.0
+  lr_scheduler:
+    patience: 10 
+    step_size: 1
+    gamma: 5.0e-1
+  optimizer: 
+    name: adam # adadelta or adam or sgd
+    adadelta:
+      lr: 1.0e-0
+      rho: 0.95 # decay rate rho for Adadelta
+      eps: 1.0e-8
+    adam:
+      lr: 1.0e-3
+      beta1: 0.9
+    sgd:
+      lr: 1.0e-3
+      momentum: 0.9
+      nesterov: True
+
+augment:
+  enabled: True
+  warp:
+    perspective: 0.0 # factor (must be 0 for now)
+    scale: [0.6, 1.4] # ratio, e.g. [0.6, 1.4]
+    stretch: [[0.6, 1.4], [0.6, 1.4]] # ratio, e.g. [0.6, 1.4]
+    rotation: 20.0 # degrees
+    shear: 10.0 # degrees
+    translate: 0.2 # ratio
+    flip: 0.5 # probability
+  texture:
+    gaussian_blur: [0.0, 2.0] # e.g. [0.0, 2.0]
+    multiply: [0.5, 1.2]
+    multiply_hue: [0.5, 1.2]
+    multiply_saturation: [0.5, 1.2]
+    gamma_contrast: [0.5, 2.0]
+    additive_gaussian_noise: 5.0
+    salt: 0.02
+    pepper: 0.02
+    grayscale: 0.3 # probability
