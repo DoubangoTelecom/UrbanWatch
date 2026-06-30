@@ -1,0 +1,12 @@
+suv
+sedan
+coupe
+motorcycle
+hatchback
+pickup
+heavytruck
+mpv
+convertible
+bus
+campervan
+van
