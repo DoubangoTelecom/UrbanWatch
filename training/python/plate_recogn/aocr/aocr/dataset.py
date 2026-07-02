@@ -7,10 +7,9 @@ import torch
 import random
 
 from natsort import natsorted
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 from torch.utils.data import Dataset, ConcatDataset, Subset
-from torch._utils import _accumulate
 import torchvision.transforms as transforms
 from aocr.warp import ShapeTransform
 
@@ -33,7 +32,7 @@ class Batch_Balanced_Dataset(object):
         log.write(f'dataset_root: {opt.train.dataset}\nselect_data: {select_data}\nbatch_ratio: {batch_ratio}\n')
         assert len(select_data) == len(batch_ratio)
 
-        _AlignCollate = AlignCollate(imgH=opt.model.imgH, imgW=opt.model.imgW, keep_ratio_with_pad=opt.model.padding)
+        _AlignCollate = AlignCollate(opt)
         self.data_loader_list = []
         self.dataloader_iter_list = []
         batch_size_list = []
@@ -57,7 +56,7 @@ class Batch_Balanced_Dataset(object):
             dataset_split = [number_dataset, total_number_dataset - number_dataset]
             indices = range(total_number_dataset)
             _dataset, _ = [Subset(_dataset, indices[offset - length:offset])
-                           for offset, length in zip(_accumulate(dataset_split), dataset_split)]
+                           for offset, length in zip(Batch_Balanced_Dataset._accumulate(dataset_split), dataset_split)]
             selected_d_log = f'num total samples of {selected_d}: {total_number_dataset} x {total_data_usage_ratio} (total_data_usage_ratio) = {len(_dataset)}\n'
             selected_d_log += f'num samples of {selected_d} per batch: {batch_size} x {float(batch_ratio_d)} (batch_ratio) = {_batch_size}'
             print(selected_d_log)
@@ -103,6 +102,21 @@ class Batch_Balanced_Dataset(object):
         balanced_batch_images = torch.cat(balanced_batch_images, 0)
 
         return balanced_batch_images, balanced_batch_texts
+    
+    @staticmethod
+    def _accumulate(iterable, fn=lambda x, y: x + y):
+        "Return running totals"
+        # _accumulate([1,2,3,4,5]) --> 1 3 6 10 15
+        # _accumulate([1,2,3,4,5], operator.mul) --> 1 2 6 24 120
+        it = iter(iterable)
+        try:
+            total = next(it)
+        except StopIteration:
+            return
+        yield total
+        for element in it:
+            total = fn(total, element)
+            yield total
 
 def hierarchical_dataset(root, opt, select_data='/'):
     """ select_data='/' contains all sub-directory of root directory """
@@ -165,21 +179,21 @@ class LmdbDataset(Dataset):
             img_key = 'image-%09d'.encode() % index
             imgbuf = txn.get(img_key)
 
-            buf = six.BytesIO()
-            buf.write(imgbuf)
-            buf.seek(0)
-            try:
-                img = Image.open(buf).convert('RGB')
-    
-            except IOError:
-                print(f'Corrupted image for {index}')
-                # make dummy image and dummy label for corrupted image.
-                img = Image.new('RGB', (self.opt.model.imgW, self.opt.model.imgH))
-                label = '[dummy_label]'
+        buf = six.BytesIO()
+        buf.write(imgbuf)
+        buf.seek(0)
+        try:
+            img = Image.open(buf).convert('RGB')
 
-            # We only train and evaluate on alphanumerics (or pre-defined character set in train.py)
-            out_of_char = f'[^{self.opt.model.alphabet}]'
-            label = re.sub(out_of_char, '', label)
+        except IOError:
+            print(f'Corrupted image for {index}')
+            # make dummy image and dummy label for corrupted image.
+            img = Image.new('RGB', (self.opt.model.imgW, self.opt.model.imgH))
+            label = '[dummy_label]'
+
+        # We only train and evaluate on alphanumerics (or pre-defined character set in train.py)
+        out_of_char = f'[^{self.opt.model.alphabet}]'
+        label = re.sub(out_of_char, '', label)[:self.opt.model.max_len]
 
         if self.opt.augment.enabled:
             img = Image.fromarray(self._augment(np.array(img)), 'RGB')
@@ -201,7 +215,7 @@ class LmdbDataset(Dataset):
         # Texture
         from imgaug import augmenters as iaa        
         sequence = []
-        activate_fn = lambda: random.randint(0, 3) == 0 # pick 1/3 only, otherwise tooo slow
+        activate_fn = lambda: random.randint(0, 4) == 0 # pick 1/4 only, otherwise tooo slow
         if activate_fn():
             sequence.append(iaa.GaussianBlur(sigma=tuple(self.opt.augment.texture.gaussian_blur)))
         if activate_fn():
@@ -261,16 +275,24 @@ class RawDataset(Dataset):
 
 class ResizeNormalize(object):
 
-    def __init__(self, size, interpolation=Image.BICUBIC):
-        self.size = size
+    def __init__(self, opt, interpolation=Image.BILINEAR):
+        self.padding = opt.model.padding
+        self.target_size = (opt.model.imgW, opt.model.imgH)
+        self.mean = float(opt.model.normalize[0] / 255.0)
+        self.std = float(opt.model.normalize[1] / 255.0)
         self.interpolation = interpolation
         self.toTensor = transforms.ToTensor()
 
-    def __call__(self, img):
-        img = img.resize(self.size, self.interpolation)
+    def __call__(self, image: Image):
+        if self.padding:
+            tmp = ImageOps.contain(image, self.target_size, self.interpolation)
+            img = Image.new(tmp.mode, self.target_size, 0)
+            img.paste(tmp, (0, 0))
+        else:
+            img = image.resize(self.target_size, self.interpolation)
         # next code same as ((x - 127.5) / 127.5)
         img = self.toTensor(img) # [0-255] -> [0-1]
-        img.sub_(0.5).div_(0.5)
+        img.sub_(self.mean).div_(self.std)
         return img
 
 
@@ -296,37 +318,35 @@ class NormalizePAD(object):
 
 class AlignCollate(object):
 
-    def __init__(self, imgH=32, imgW=100, keep_ratio_with_pad=False):
-        self.imgH = imgH
-        self.imgW = imgW
-        self.keep_ratio_with_pad = keep_ratio_with_pad
+    def __init__(self, opt):
+        self.opt = opt
 
     def __call__(self, batch):
         batch = filter(lambda x: x is not None, batch)
         images, labels = zip(*batch)
 
-        if self.keep_ratio_with_pad:  # same concept with 'Rosetta' paper
-            resized_max_w = self.imgW
+        if self.opt.model.padding and False:  # same concept with 'Rosetta' paper
+            resized_max_w = self.opt.model.imgW
             input_channel = 3 if images[0].mode == 'RGB' else 1
-            transform = NormalizePAD((input_channel, self.imgH, resized_max_w))
+            transform = NormalizePAD((input_channel, self.opt.model.imgH, resized_max_w))
 
             resized_images = []
             for image in images:
                 w, h = image.size
                 ratio = w / float(h)
-                if math.ceil(self.imgH * ratio) > self.imgW:
-                    resized_w = self.imgW
+                if math.ceil(self.opt.model.imgH * ratio) > self.opt.model.imgW:
+                    resized_w = self.opt.model.imgW
                 else:
-                    resized_w = math.ceil(self.imgH * ratio)
+                    resized_w = math.ceil(self.opt.model.imgH * ratio)
 
-                resized_image = image.resize((resized_w, self.imgH), Image.BICUBIC)
+                resized_image = image.resize((resized_w, self.opt.model.imgH), Image.BICUBIC)
                 resized_images.append(transform(resized_image))
                 # resized_image.save('./image_test/%d_test.jpg' % w)
 
             image_tensors = torch.cat([t.unsqueeze(0) for t in resized_images], 0)
 
         else:
-            transform = ResizeNormalize((self.imgW, self.imgH))
+            transform = ResizeNormalize(self.opt)
             image_tensors = [transform(image) for image in images]
             image_tensors = torch.cat([t.unsqueeze(0) for t in image_tensors], 0)
 
