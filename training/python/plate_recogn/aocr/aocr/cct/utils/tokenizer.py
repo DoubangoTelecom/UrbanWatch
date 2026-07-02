@@ -2,6 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .mobilenetv4 import MobileNetV4
+from .blurpool import BlurPool
+
+class MaxBlurPooling(nn.Module):
+    def __init__(self, channels, pad_type='reflect', filt_size=3, stride=2, pad_off=0):
+        super(MaxBlurPooling, self).__init__()
+        self.net = nn.Sequential(
+            nn.MaxPool2d(stride, 1, 0),
+            BlurPool(channels, pad_type, filt_size, stride, pad_off),
+        )
+    def forward(self, input):
+        return self.net(input)
     
 class MNV4Tokenizer(nn.Module):
     def __init__(self,
@@ -23,6 +34,48 @@ class MNV4Tokenizer(nn.Module):
 
     def forward(self, x):
         return self.conv_layers(x).reshape([-1, self.output_channels, self.sequence_length]).permute(0, 2, 1)
+
+class VGGTokenizer(nn.Module):
+    def __init__(self,
+                 imgH, imgW,
+                 input_channels=1,
+                 output_channel=256):
+        super(VGGTokenizer, self).__init__()
+
+        self.output_channel = [int(output_channel / 8), int(output_channel / 4),
+                               int(output_channel / 2), output_channel]  # [64, 128, 256, 512]
+                
+        self.ConvNet = nn.Sequential(
+            nn.Conv2d(input_channels, self.output_channel[0], 3, 1, 1),
+            nn.BatchNorm2d(self.output_channel[0]),
+            nn.ReLU(),
+            nn.MaxPool2d((2, 2), (2, 2)),
+            
+            nn.Conv2d(self.output_channel[0], self.output_channel[1], 3, 1, 1),
+            nn.Conv2d(self.output_channel[1], self.output_channel[1], 3, 1, 1),
+            nn.BatchNorm2d(self.output_channel[1]),
+            nn.ReLU(), 
+            nn.MaxPool2d((2, 2), (2, 2)),
+            
+            nn.Conv2d(self.output_channel[1], self.output_channel[2], 3, 1, 1),
+            nn.Conv2d(self.output_channel[2], self.output_channel[2], 3, 1, 1),
+            nn.BatchNorm2d(self.output_channel[2]),
+            nn.ReLU(),
+            nn.MaxPool2d((2, 2), (2, 2)),
+            
+            nn.Conv2d(self.output_channel[2], self.output_channel[3], 3, 1, 1),
+            nn.BatchNorm2d(self.output_channel[3]),
+            nn.ReLU(),
+        )
+        
+        # Determine Sequence length right now. Cannot use flattner,
+        # would break batch inference
+        net_out = self.ConvNet(torch.zeros((1, input_channels, imgH, imgW)))
+        self.sequence_length = net_out.shape[-1]*net_out.shape[-2]
+        self.output_channels = net_out.shape[-3]
+
+    def forward(self, x):
+        return self.ConvNet(x).reshape([-1, self.output_channels, self.sequence_length]).permute(0, 2, 1)
 
 class Tokenizer(nn.Module):
     def __init__(self,

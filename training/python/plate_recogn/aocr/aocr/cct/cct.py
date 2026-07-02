@@ -1,7 +1,7 @@
 from torch.hub import load_state_dict_from_url
 import torch.nn as nn
 from .utils.transformers import TransformerClassifier
-from .utils.tokenizer import Tokenizer, MNV4Tokenizer
+from .utils.tokenizer import Tokenizer, MNV4Tokenizer, VGGTokenizer
 from .utils.helpers import pe_check, fc_check
 
 try:
@@ -28,13 +28,11 @@ model_urls = {
         'https://shi-labs.com/projects/cct/checkpoints/finetuned/cct_14_7x2_384_flowers102.pth',
 }
 
-class CCT_MNV4(nn.Module):
+class CCT_AOCR(nn.Module):
     def __init__(self,
                  imgh=112,imgw=112,
                  n_input_channels=1,
-                 mnv4_block_size='medium',
-                 mnv4_width_mult=1.0,
-                 mnv4_out_stage=3,
+                 backbone={'type':'vgg', 'vgg': {'channels': 160}},
                  seq_pool=True,
                  dropout=0.,
                  attention_dropout=0.1,
@@ -44,15 +42,24 @@ class CCT_MNV4(nn.Module):
                  mlp_ratio=4.0,
                  positional_embedding='learnable',
                  *args, **kwargs):
-        super(CCT_MNV4, self).__init__()
-
-        self.tokenizer = MNV4Tokenizer(
-            imgh, imgw,
-            input_channels=n_input_channels,
-            block_size=mnv4_block_size,
-            width_mult=mnv4_width_mult,
-            out_stage=mnv4_out_stage
-        )
+        super(CCT_AOCR, self).__init__()
+                
+        if backbone.type == 'mnv4':
+            self.tokenizer = MNV4Tokenizer(
+                imgh, imgw,
+                input_channels=n_input_channels,
+                block_size=backbone.mnv4.block_size,
+                width_mult=backbone.mnv4.width_mult,
+                out_stage=backbone.mnv4.out_stage
+            )
+        else:
+            assert backbone.type == 'vgg', f'Invalid backbone type: {backbone.type}'
+            self.tokenizer = VGGTokenizer(
+                imgh, imgw,
+                input_channels=n_input_channels,
+                output_channel=backbone.vgg.channels
+            )
+        
         self.classifier = TransformerClassifier(
             sequence_length=self.tokenizer.sequence_length,
             embedding_dim=self.tokenizer.output_channels,

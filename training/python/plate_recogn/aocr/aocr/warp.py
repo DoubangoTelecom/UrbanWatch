@@ -27,16 +27,36 @@ def get_flip_matrix(prob=0.5):
     return F
 
 
-def get_perspective_matrix(perspective=0.0):
+def get_perspective_matrix(perspective, width, height):
     """
 
     :param perspective:
     :return:
     """
-    P = np.eye(3)
-    P[2, 0] = random.uniform(-perspective, perspective)  # x perspective (about y)
-    P[2, 1] = random.uniform(-perspective, perspective)  # y perspective (about x)
-    return P
+    if perspective == 0:
+        return np.eye(3)
+    else:
+        assert perspective >= 0.0 and perspective <= 0.5, f'perspective({perspective}) must be within [0, 0.5]'
+        r = random.choice([1.0, -1.0])
+        __offx = lambda: width*random.uniform(0.0,perspective) * r
+        __offy = lambda: height*random.uniform(0.0,perspective) * r
+                
+        src = np.float32([
+                [0, 0],
+                [width - 1, 0],
+                [width - 1, height - 1],
+                [0, height - 1]])
+
+        offsets = np.float32([[__offx(), __offy()],
+                                [__offx(), __offy()],
+                                [__offx(), __offy()],
+                                [__offx(), __offy()]])
+
+        dst = (src + offsets).astype(np.float32)
+        
+        H = cv2.getPerspectiveTransform(src, dst)
+        
+        return H
 
 
 def get_rotation_matrix(degree=0.0):
@@ -75,18 +95,19 @@ def get_stretch_matrix(width_ratio=(1, 1), height_ratio=(1, 1)):
     return Str
 
 
-def get_shear_matrix(degree):
+def get_shear_matrix(degree=(0, 0)):
     """
 
     :param degree:
     :return:
     """
+    assert len(degree) == 2, f'{degree} must be list of 2'
     Sh = np.eye(3)
     Sh[0, 1] = math.tan(
-        random.uniform(-degree, degree) * math.pi / 180
+        random.uniform(-degree[0], degree[0]) * math.pi / 180
     )  # x shear (deg)
     Sh[1, 0] = math.tan(
-        random.uniform(-degree, degree) * math.pi / 180
+        random.uniform(-degree[1], degree[1]) * math.pi / 180
     )  # y shear (deg)
     return Sh
 
@@ -145,7 +166,7 @@ class ShapeTransform:
         scale: Tuple[int, int] = (1, 1),
         stretch: Tuple = ((1, 1), (1, 1)),
         rotation: float = 0.0,
-        shear: float = 0.0,
+        shear: float = (0, 0),
         translate: float = 0.0,
         flip: float = 0.0,
         **kwargs
@@ -167,7 +188,7 @@ class ShapeTransform:
         C[0, 2] = -width / 2
         C[1, 2] = -height / 2
 
-        P = get_perspective_matrix(self.perspective)
+        P = get_perspective_matrix(self.perspective, width, height)
         C = P @ C
 
         Scl = get_scale_matrix(self.scale_ratio)

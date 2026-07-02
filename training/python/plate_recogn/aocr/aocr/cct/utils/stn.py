@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .blurpool import BlurPool
+from einops.layers.torch import Rearrange
 from .fullyconnected import FullyConnected
 
 class Stn(nn.Module):
@@ -30,7 +31,7 @@ class MaxBlurPooling(nn.Module):
 class StnTPS(Stn):
     """ Rectification Network of RARE, namely TPS based STN """
 
-    def __init__(self, F, I_size, I_r_size, I_channel_num=1):
+    def __init__(self, F, I_size, I_r_size, I_channel_num=1, align_corners=False):
         """ Based on RARE TPS
         input:
             batch_I: Batch Input Image [batch_size x I_channel_num x I_height x I_width]
@@ -45,20 +46,21 @@ class StnTPS(Stn):
         self.I_size = I_size
         self.I_r_size = I_r_size  # = (I_r_height, I_r_width)
         self.I_channel_num = I_channel_num
+        self.align_corners = align_corners
         self.LocNet = LocNet(self.F, self.I_channel_num)
         self.GridGenerator = GridGenerator(self.F, self.I_r_size)
 
     def forward(self, batch_I):
         batch_C_prime = self.LocNet(batch_I)  # batch_size x (Fx2) x 1 x 1
+        build_P_prime = self.GridGenerator.build_P_prime(batch_C_prime.view(-1, self.F, 2))  # batch_size x n (= I_r_width x I_r_height) x 2
         if self.export_mode:
-            return batch_C_prime
+            return build_P_prime
         else:
-            build_P_prime = self.GridGenerator.build_P_prime(batch_C_prime.view(-1, self.F, 2))  # batch_size x n (= I_r_width x I_r_height) x 2
             build_P_prime_reshape = build_P_prime.reshape([build_P_prime.size(0), self.I_r_size[0], self.I_r_size[1], 2])
             
             # TODO(dmi): original mode uses 'border' padding, changing it to 'zeros'
             # because of https://github.com/NVIDIA/TensorRT/issues/670#issuecomment-748297050
-            batch_I_r = self._grid_sample(batch_I, build_P_prime_reshape, mode='bilinear', padding_mode='zeros', align_corners=True)
+            batch_I_r = self._grid_sample(batch_I, build_P_prime_reshape, mode='bilinear', padding_mode='zeros', align_corners=self.align_corners)
 
             return batch_I_r
     
@@ -187,19 +189,27 @@ class LocNet(nn.Module):
             nn.AdaptiveAvgPool2d(1)  # batch_size x 128 x 1 x 1
         )
 
-        self.loc_fc1 = nn.Sequential(nn.Conv2d(128, 64, kernel_size=1), nn.ReLU(True))
-        self.loc_fc2 = nn.Conv2d(64, self.F * 2, kernel_size=1)
+        # INFO(dmi): Changed the orignal code Linear with Conv2d to have it
+        # working on Debix A / VX Delegate (no support for FullyConnected)
+        self.loc_fc1 = nn.Sequential(
+            Rearrange('b f 1 1 -> b f'),
+            FullyConnected(128, 64), 
+            nn.ReLU(True)
+        )
+        self.loc_fc2 = FullyConnected(64, self.F * 2)
 
         # Init fc2 in LocNet
-        self.loc_fc2.weight.data.fill_(0)
+        self.loc_fc2.W.data.fill_(0)
         """ see RARE paper Fig. 6 (a) """
+        # INFO(dmi): 'ctrl_pts_y_top' and 'ctrl_pts_y_bottom' from the
+        # original code where not correct. Initial transformation was 45deg rotated.
         ctrl_pts_x = np.linspace(-1.0, 1.0, int(F / 2))
-        ctrl_pts_y_top = np.linspace(0.0, -1.0, num=int(F / 2))
-        ctrl_pts_y_bottom = np.linspace(1.0, 0.0, num=int(F / 2))
+        ctrl_pts_y_top = np.linspace(-1.0, -1.0, num=int(F / 2))
+        ctrl_pts_y_bottom = np.linspace(1.0, 1.0, num=int(F / 2))
         ctrl_pts_top = np.stack([ctrl_pts_x, ctrl_pts_y_top], axis=1)
         ctrl_pts_bottom = np.stack([ctrl_pts_x, ctrl_pts_y_bottom], axis=1)
         initial_bias = np.concatenate([ctrl_pts_top, ctrl_pts_bottom], axis=0)
-        self.loc_fc2.bias.data = torch.from_numpy(initial_bias).float().view(-1)
+        self.loc_fc2.b.data = torch.from_numpy(initial_bias).float().view(-1)
 
     def forward(self, batch_I):
         """
@@ -281,23 +291,30 @@ class GridGenerator(nn.Module):
         return P_hat  # n x F+3
 
     def build_P_prime(self, batch_C_prime):
-        """ Generate Grid from batch_C_prime [batch_size x F x 2] """
-        batch_size = batch_C_prime.size(0)
-        batch_inv_delta_C = self.inv_delta_C.repeat(batch_size, 1, 1)
-        batch_P_hat = self.P_hat.repeat(batch_size, 1, 1)
-        batch_C_prime_with_zeros = torch.cat((batch_C_prime, torch.zeros(
-            batch_size, 3, 2).float().to(batch_C_prime.device)), dim=1)  # batch_size x F+3 x 2
-        batch_T = torch.bmm(batch_inv_delta_C, batch_C_prime_with_zeros)  # batch_size x F+3 x 2
-        batch_P_prime = torch.bmm(batch_P_hat, batch_T)  # batch_size x n x 2
-        return batch_P_prime  # batch_size x n x 2
+        """ Generate Grid from batch_C_prime [batch_size x F x 2] """ 
+        if False: # INFO(dmi): Original code: not well-optimized and not NPU-friendly    
+            batch_size = batch_C_prime.size(0)
+            batch_inv_delta_C = self.inv_delta_C.repeat(batch_size, 1, 1)
+            batch_P_hat = self.P_hat.repeat(batch_size, 1, 1)
+            batch_C_prime_with_zeros = torch.cat((batch_C_prime, torch.zeros(
+                batch_size, 3, 2).float().to(batch_C_prime.device)), dim=1)  # batch_size x F+3 x 2
+            batch_T = torch.bmm(batch_inv_delta_C, batch_C_prime_with_zeros)  # batch_size x F+3 x 2
+            batch_P_prime = torch.bmm(batch_P_hat, batch_T)  # batch_size x n x 2
+            return batch_P_prime  # batch_size x n x 2
+        else:
+            batch_C_prime_with_zeros = F.pad(batch_C_prime.transpose(2, 1), (0, 3), mode='constant', value=0).transpose(2, 1)
+            batch_T = torch.matmul(self.inv_delta_C, batch_C_prime_with_zeros)
+            batch_P_prime = torch.matmul(self.P_hat, batch_T)
+            return batch_P_prime
 
 
 class StnAffine(Stn):
 
-    def __init__(self, I_size, I_channel_num):
+    def __init__(self, I_size, I_channel_num, N_filters=32):
         super(StnAffine, self).__init__()
         assert(len(I_size) == 2)
-        
+        self.I_size = I_size
+        self.N_filters = N_filters
         # Guess loc out size
         self.loc_outsz = 1
         for sz in I_size:
@@ -306,23 +323,23 @@ class StnAffine(Stn):
         # Spatial transformer localization-network       
         self.localization = nn.Sequential(
             # input x = (3, 112, 112)
-            nn.Conv2d(I_channel_num, 32, kernel_size=3), # (32, 110, 110)
-            MaxBlurPooling(32, 'none', 2, 2), # (32, 54, 54)
+            nn.Conv2d(I_channel_num, self.N_filters, kernel_size=3), # (32, 110, 110)
+            MaxBlurPooling(self.N_filters, 'none', 2, 2), # (32, 54, 54)
             nn.ReLU(True), # (32, 54, 54)
-            nn.Conv2d(32, 32, kernel_size=5), # (32, 50, 50)
-            MaxBlurPooling(32, 'none', 3, 3), # (32, 16, 16)
+            nn.Conv2d(self.N_filters, self.N_filters, kernel_size=5), # (32, 50, 50)
+            MaxBlurPooling(self.N_filters, 'none', 3, 3), # (32, 16, 16)
             nn.ReLU(True), # (32, 16, 16)
             nn.Flatten(), # (32*16*16)
         )
         # Regressor for the 3x2 affine matrix
         self.fc_loc = nn.Sequential(
-            FullyConnected(32 * self.loc_outsz, 32),
+            FullyConnected(self.N_filters * self.loc_outsz, self.N_filters),
             nn.ReLU(True),
-            FullyConnected(32, 3 * 2)
+            FullyConnected(self.N_filters, 3 * 2)
         )
         # Initialize the weights/bias with identity transformation
-        self.fc_loc[2].conv.weight.data.zero_()
-        self.fc_loc[2].conv.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+        self.fc_loc[-1].W.data.zero_()
+        self.fc_loc[-1].b.data.copy_(torch.tensor([[1, 0, 0, 0, 1, 0]], dtype=torch.float))
 
     def _loc_output_shape(self, sz):
         x = sz - 2 # Conv2d(kz=3)
@@ -333,9 +350,11 @@ class StnAffine(Stn):
 
     def forward(self, x):
         xs = self.localization(x)
-        xs = xs.view(x.size(0), -1)
+        xs = xs.view(-1, self.N_filters * self.loc_outsz)        
         theta = self.fc_loc(xs)
-
-        grid = F.affine_grid(theta.view(-1, 2, 3), x.size(), align_corners=False)
-        x = F.grid_sample(x, grid)
-        return x
+        if self.export_mode:
+            return theta
+        else:
+            grid = F.affine_grid(theta.view(-1, 2, 3), x.size(), align_corners=False)
+            x = F.grid_sample(x, grid)
+            return x

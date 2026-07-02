@@ -151,8 +151,9 @@ class SelfAttention(nn.Module):
         scores = torch.matmul(Q, K.transpose(-2, -1))
         
         # then scale by the square root of the key dimension
-        # TODO(dmi): Commented to avoid "ERROR: Int64 input is not supported" on Debix A
-        #scores *= (1 / torch.sqrt(torch.tensor(Q.size(-1), dtype=torch.float32)))
+        # TODO(dmi): "ERROR: Int64 input is not supported" on Debix A if using 'edgeai-torch'
+        # ... but is ok when using onnx2tf
+        scores *= (1 / torch.sqrt(torch.tensor(Q.size(-1), dtype=torch.float32)))
 
         # Softmax to normalize scores, producing attention weights
         attention_weights = F.softmax(scores, dim=-1)

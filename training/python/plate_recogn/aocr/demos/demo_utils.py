@@ -1,5 +1,5 @@
-import os, numpy as np, cv2
-from PIL import Image
+import os, numpy as np
+from PIL import Image, ImageOps
 
 def get_image_list(path, image_ext = [".jpg", ".jpeg", ".webp", ".bmp", ".png"]):
     image_names = []
@@ -12,34 +12,40 @@ def get_image_list(path, image_ext = [".jpg", ".jpeg", ".webp", ".bmp", ".png"])
     return image_names
 
 def preprocess_image(image :Image, cfg) -> np.ndarray:
-    # Using OpenCV (as the pytorch code) instead of Pillow to ease comparison  
-    #img = np.array(image.resize(cfg.data.val.input_size, Image.BILINEAR))
-    img = cv2.resize(np.array(image), dsize=(cfg.model.imgW, cfg.model.imgH), interpolation=cv2.INTER_LINEAR)
-    return ((img.astype(np.float32) - 127.5) / 127.5).astype(np.float32)
+    target_size = (cfg.model.imgW, cfg.model.imgH)
+    if cfg.model.padding:
+        tmp = ImageOps.contain(image, target_size, Image.BILINEAR)
+        img = Image.new(tmp.mode, target_size, 0)
+        img.paste(tmp, (0, 0))
+    else:
+        img = image.resize(target_size, Image.BILINEAR)    
+    return ((np.array(img).astype(np.float32) - cfg.model.normalize[0]) / cfg.model.normalize[1]).astype(np.float32)
 
 def load_image(path: str, cfg, preprocess=True):
-    img = Image.open(path).convert('L')
+    img = Image.open(path).convert('L' if cfg.model.grayscale else 'RGB')
     if preprocess:
         img = preprocess_image(img, cfg)
     return img
 
-def ctc_decode(alphabet :list, codes :np.array):
+def pred_decode(alphabet :list, codes :np.array, ctc :bool):
     assert(isinstance(alphabet, list))
     assert(len(codes.shape) == 1)
     char_list = []
     for i in range(len(codes)):
-        if codes[i] != 0 and (not (i > 0 and codes[i - 1] == codes[i])):  # removing repeated characters and blank.
+        if codes[i] != 0 and (not (i > 0 and codes[i - 1] == codes[i]) or not ctc):
             char_list.append(alphabet[codes[i]])
 
     return ''.join(char_list)
 
 def grid2coords(grid, width, height):
-    assert width==height, 'Next code except width({})==height({})'.format(width, height)
+    assert width==height, f'Next code except width({width})==height({height})'
     # https://docs.pytorch.org/docs/0.3.1/nn.html#torch.nn.functional.grid_sample
+    # https://github.com/open-mmlab/mmcv/blob/90d83c94cfb967ef162c449faf559616f31f28c2/mmcv/ops/point_sample.py#L12
     # grid has values in the range of [-1, 1]
     # On C++ code we can use SubMul function
-    factor = (width * 0.5) - 1.0
-    return np.floor((grid + 1.0) * factor).astype(np.float32)
+    scale = (width * 0.5)
+    shift = (1.0 / width) - 1.0
+    return (grid - shift) * scale
 
 def theta2warp(theta, W, H):
     """https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.affine_grid.html"""

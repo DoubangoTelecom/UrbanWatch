@@ -1,4 +1,4 @@
-import os, time
+import os
 import argparse
 
 import torch
@@ -6,24 +6,26 @@ import torch.backends.cudnn as cudnn
 import torch.utils.data
 
 from aocr.config import Config
-from aocr.utils import CTCLabelConverter
+from aocr.utils import CTCLabelConverter, CELabelConverter
 from aocr.dataset import RawDataset, AlignCollate
 from aocr.model import AOCR
+
+from rich import print
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def demo(cfg, opt):
     """ model configuration """
-    converter = CTCLabelConverter(cfg.model.alphabet)
+    converter = CTCLabelConverter(cfg.model.alphabet) if cfg.train.loss.type == 'ctc' else \
+        CELabelConverter(cfg.model.alphabet)
 
     model = AOCR(cfg, training=False).to(device).eval()
-    model = torch.nn.DataParallel(model)
 
-    # load model
+    # load weights
     print('loading pretrained model from %s' % opt.weights)   
     model.load_state_dict(torch.load(opt.weights, map_location=device), strict=True)
 
     # prepare data. two demo images from https://github.com/bgshih/crnn#run-demo
-    AlignCollate_demo = AlignCollate(imgH=cfg.model.imgH, imgW=cfg.model.imgW, keep_ratio_with_pad=cfg.model.padding)
+    AlignCollate_demo = AlignCollate(cfg)
     demo_data = RawDataset(root=opt.images, opt=cfg)  # use RawDataset
     demo_loader = torch.utils.data.DataLoader(
         demo_data, batch_size=1,
@@ -33,6 +35,8 @@ def demo(cfg, opt):
 
     # predict
     model.eval()
+    num_ok = 0
+    num_all = 0
     with torch.no_grad():
         for image_tensors, image_path_list in demo_loader:
             batch_size = image_tensors.size(0)
@@ -46,22 +50,21 @@ def demo(cfg, opt):
             preds_max_prob, preds_index = preds.max(-1)
             preds_str = converter.decode(preds_index, preds_size)
 
-            log = open(f'./log_demo_result.txt', 'a')
-            dashed_line = '-' * 80
-            head = f'{"image_path":25s}\t{"predicted_labels":25s}\tconfidence score'
-            
-            print(f'{dashed_line}\n{head}\n{dashed_line}')
-            log.write(f'{dashed_line}\n{head}\n{dashed_line}\n')
-
-            for img_name, pred, pred_max_prob in zip(image_path_list, preds_str, preds_max_prob):
+            for img_path, pred, pred_max_prob in zip(image_path_list, preds_str, preds_max_prob):
 
                 # calculate confidence score (= multiply of pred_max_prob)
                 confidence_score = pred_max_prob.cumprod(dim=0)[-1]
+                
+                img_name = os.path.basename(img_path)
+                gt = img_name.split('.')[0]
+                matched = (gt == pred)
+                num_ok += 1 if matched else 0
+                num_all += 1
 
-                print(f'{img_name:25s}\t{pred:25s}\t{confidence_score:0.4f}')
-                log.write(f'{img_name:25s}\t{pred:25s}\t{confidence_score:0.4f}\n')
+                print('{}, pred: {}, score: {:.2}, matched: {}'.format(img_name, pred, confidence_score, matched))
 
-            log.close()
+            
+    print(':: Accuracy: {:.3f} [{:2}/{:2}]::'.format(num_ok / num_all, num_ok, num_all))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -12,12 +12,14 @@ import torch.optim as optim
 import torch.utils.data
 import numpy as np
 
+from rich import print
+
 from aocr.config import Config
-from aocr.utils import CTCLabelConverter, CTCLabelConverterForBaiduWarpctc, AttnLabelConverter, Averager
+from aocr.utils import CTCLabelConverter, CELabelConverter, Averager
 from aocr.dataset import hierarchical_dataset, AlignCollate, Batch_Balanced_Dataset
 from aocr.model import AOCR
 from aocr.val import validation
-from aocr.focal_loss import FocalLossCTC
+from aocr.focal_loss import FocalLoss
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train(cfg):
@@ -26,7 +28,7 @@ def train(cfg):
 
     # validation dataset
     log = open(f'./saved_models/{cfg.model.name}/log_dataset.txt', 'a')
-    AlignCollate_valid = AlignCollate(imgH=cfg.model.imgH, imgW=cfg.model.imgW, keep_ratio_with_pad=cfg.model.padding)
+    AlignCollate_valid = AlignCollate(cfg)
     cfg_val = copy.deepcopy(cfg)
     cfg_val.augment._replace(enabled=False) # no augmentation for validation
     valid_dataset, valid_dataset_log = hierarchical_dataset(root=cfg_val.val.dataset, opt=cfg_val)
@@ -41,7 +43,8 @@ def train(cfg):
     log.close()
     
     # label converter
-    converter = CTCLabelConverter(cfg.model.alphabet)
+    converter = CTCLabelConverter(cfg.model.alphabet) if cfg.train.loss.type == 'ctc' else \
+        CELabelConverter(cfg.model.alphabet)
     
     # Model
     model = AOCR(cfg, training=True).to(device)
@@ -62,19 +65,19 @@ def train(cfg):
             continue
 
     # data parallel for multi-GPU
-    model = torch.nn.DataParallel(model)
     model.train()
     model_path = './saved_models/{}/best_norm_ED.pth'.format(cfg.model.name)
     if os.path.exists(model_path):
         print(f'loading pretrained model from {model_path}')
-        model.load_state_dict(torch.load(model_path), strict=True)
+        model.load_state_dict(torch.load(model_path), strict=False)
     else:
         print(f'No weigths at {model_path}')
+        
+    model = torch.nn.DataParallel(model)
 
     """ setup loss """
-    criterion = FocalLossCTC(
-        **cfg.train.loss.focal_ctc._asdict()
-    )
+    criterion = FocalLoss.build(**cfg.train.loss._asdict())
+    
     # loss averager
     loss_avg = Averager()
 
@@ -87,12 +90,18 @@ def train(cfg):
     print('Trainable params num : ', sum(params_num))
 
     # setup optimizer
-    if cfg.train.optimizer == 'adam':
+    if cfg.train.optimizer.name == 'adam':
         optimizer = optim.Adam(filtered_parameters, lr=cfg.train.optimizer.adam.lr, betas=(cfg.train.optimizer.adam.beta1, 0.999))
+    elif cfg.train.optimizer.name == 'sgd':
+        optimizer = optim.SGD(filtered_parameters, lr=cfg.train.optimizer.sgd.lr, momentum=cfg.train.optimizer.sgd.momentum, nesterov=cfg.train.optimizer.sgd.nesterov)
     else:
         optimizer = optim.Adadelta(filtered_parameters, lr=cfg.train.optimizer.adadelta.lr, rho=cfg.train.optimizer.adadelta.rho, eps=cfg.train.optimizer.adadelta.eps)
-    print("Optimizer:")
-    print(optimizer)
+    print("Optimizer:", optimizer)
+    
+    # LR-Scheduler (https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html#steplr)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=cfg.train.lr_scheduler.step_size, gamma=cfg.train.lr_scheduler.gamma
+    )
 
     """ final options """
     with open(f'./saved_models/{cfg.model.name}/opt.txt', 'a') as opt_file:
@@ -105,7 +114,7 @@ def train(cfg):
         opt_file.write(opt_log)
         
     """ model name """
-    print('Model name:', cfg.model.name)
+    print(f'Model info: {cfg.model}\nOutChannels: {model.module.cct.tokenizer.output_channels}\nSeqlen: {model.module.sequence_length}')
     
     """ start training """
     start_iter = 0
@@ -119,7 +128,9 @@ def train(cfg):
     start_time = time.time()
     best_accuracy = -1
     best_norm_ED = -1
-    iteration = start_iter
+    iteration = start_iter 
+    num_epoch_without_accuracy_increase = 0
+    lr_scheduler_patience = cfg.train.lr_scheduler.patience // cfg.val.interval
 
     while(True):
         
@@ -130,8 +141,11 @@ def train(cfg):
 
         preds = model(image)
         
-        preds_size = torch.IntTensor([preds.size(1)] * image.size(0))
-        cost = criterion(preds.log_softmax(2).permute(1, 0, 2), text, preds_size, length)
+        if cfg.train.loss.type == 'ctc':
+            preds_size = torch.IntTensor([preds.size(1)] * image.size(0))
+            cost = criterion(preds.log_softmax(2).permute(1, 0, 2), text, preds_size, length)
+        else:
+            cost = criterion(preds.view(-1, preds.shape[-1]), text.contiguous().view(-1))
 
         model.zero_grad()
         cost.backward()
@@ -156,18 +170,28 @@ def train(cfg):
                 loss_log = f'[{iteration+1}/{cfg.train.num_iter}] Train loss: {loss_avg.val():0.5f}, Valid loss: {valid_loss:0.5f}, Elapsed_time: {elapsed_time:0.5f}'
                 loss_avg.reset()
 
-                current_model_log = f'{"Current_accuracy":17s}: {current_accuracy:0.3f}, {"Current_norm_ED":17s}: {current_norm_ED:0.2f}'
+                current_model_log = f'{"Current_accuracy":17s}: {current_accuracy:0.3f}, {"Current_norm_ED":17s}: {current_norm_ED:0.3f}'
 
                 # keep best accuracy model (on valid dataset)
                 if current_accuracy > best_accuracy:
                     best_accuracy = current_accuracy
-                    torch.save(model.state_dict(), f'./saved_models/{cfg.model.name}/best_accuracy.pth')
+                    torch.save(model.module.state_dict(), f'./saved_models/{cfg.model.name}/best_accuracy.pth')
+                    num_epoch_without_accuracy_increase = -1
                 if current_norm_ED > best_norm_ED:
                     best_norm_ED = current_norm_ED
-                    torch.save(model.state_dict(), f'./saved_models/{cfg.model.name}/best_norm_ED.pth')
-                best_model_log = f'{"Best_accuracy":17s}: {best_accuracy:0.3f}, {"Best_norm_ED":17s}: {best_norm_ED:0.2f}'
+                    torch.save(model.module.state_dict(), f'./saved_models/{cfg.model.name}/best_norm_ED.pth')
+                    num_epoch_without_accuracy_increase = -1
+                
+                # LR
+                num_epoch_without_accuracy_increase += 1
+                if num_epoch_without_accuracy_increase >= lr_scheduler_patience:
+                    num_epoch_without_accuracy_increase = 0
+                    lr_scheduler.step()
+                lr_model_log = f'lr: {lr_scheduler.get_last_lr()[0]:.3e}, newai: {num_epoch_without_accuracy_increase*cfg.val.interval:4d} / {cfg.train.lr_scheduler.patience: 4d}'
+                
+                best_model_log = f'{"Best_accuracy":17s}: {best_accuracy:0.3f}, {"Best_norm_ED":17s}: {best_norm_ED:0.3f}'
 
-                loss_model_log = f'{loss_log}\n{current_model_log}\n{best_model_log}'
+                loss_model_log = f'{loss_log}\n{current_model_log}\n{best_model_log}\n{lr_model_log}'
                 print(loss_model_log)
                 log.write(loss_model_log + '\n')
 

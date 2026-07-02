@@ -11,7 +11,8 @@ def export(cfg, opt):
     model.load_state_dict(torch.load(opt.weights, map_location=lambda storage, loc: storage, weights_only=True))
     
     sample_args = (torch.randn(BATCH_SIZE, 1 if cfg.model.grayscale else 3, cfg.model.imgH, cfg.model.imgW), )
-    for mode in ['-stn', 'stn']:
+    modes = ['-stn', 'stn'] if cfg.model.stn_type != "none" else ['-stn']
+    for mode in modes:
         print('Exporting for mode [{}]...'.format(mode))
         model._set_export_mode(mode)
         file_path = 'aocr_{}-stn.onnx'.format(cfg.model.name) if mode == 'stn' else \
@@ -24,7 +25,7 @@ def export(cfg, opt):
             model.eval(),
             *sample_args,
             file_path,
-            verbose=True,
+            verbose=False,
             keep_initializers_as_inputs=True,
             opset_version=11, # requires old torch (e.g. 1.13.1), newest one (e.g. 2.9.0) will force us to use opset-18 which is not supported by jetpack 4.x
             input_names=["input"],

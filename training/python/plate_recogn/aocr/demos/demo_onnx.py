@@ -4,10 +4,9 @@ import onnxruntime as rt
 import cv2
 from aocr.config import Config
 import os
-import json
 from rich import print
 
-from demo_utils import get_image_list, load_image, ctc_decode, grid2coords, theta2warp
+from demo_utils import get_image_list, load_image, pred_decode, grid2coords, theta2warp
 
 def demo(cfg, opt):
     
@@ -23,10 +22,6 @@ def demo(cfg, opt):
 
     # alphabet
     alphabet_list = ['$'] + list(cfg.model.alphabet) # $ at 0 is CTC blank
-    
-    # Ground truth
-    with open(os.path.join(opt.images, 'gt.json')) as f:
-        ground_truth = json.load(f)
 
     num_ok = 0
     for image_path in images_list:
@@ -40,7 +35,7 @@ def demo(cfg, opt):
         if cfg.model.stn_type == 'tps':
             grid_or_theta = grid_or_theta[0].reshape((cfg.model.imgH, cfg.model.imgW, 2)).astype(np.float32)
 
-            dstMap1, dstMap2 = cv2.convertMaps(grid2coords(grid_or_theta, 112, 112), None, cv2.CV_16SC2)
+            dstMap1, dstMap2 = cv2.convertMaps(grid2coords(grid_or_theta, cfg.model.imgW, cfg.model.imgH), None, cv2.CV_16SC2)
             image_rectified = cv2.remap(image, dstMap1, dstMap2, cv2.INTER_LINEAR, None, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
         else:
             assert(cfg.model.stn_type == 'affine')
@@ -48,23 +43,23 @@ def demo(cfg, opt):
             image_rectified = cv2.warpAffine(image, M, (cfg.model.imgW, cfg.model.imgH))
         
         # visualize
-        if opt.visualize:
-            cv2.imshow('image', np.concatenate((image, image_rectified), axis=0))
+        if opt.visualize or False:
+            cv2.imshow('image', np.concatenate(((image+0.5)*0.5, (image_rectified+0.5)*0.5), axis=0))
             ch = cv2.waitKey(0)
             if ch == 27 or ch == ord("q") or ch == ord("Q"):
                 break
         
         # OCR
-        gt = ground_truth[os.path.basename(image_path)]
+        gt = os.path.basename(image_path).split('.')[0]
         preds = model_core.run(None, {inp_core: image_rectified.reshape((1, 1, cfg.model.imgH, cfg.model.imgW))})[0]
         preds_index = np.argmax(preds, axis=-1)
         preds_max_prob = np.take_along_axis(preds, preds_index[...,None], axis=2)
         
-        preds_str = ctc_decode(alphabet_list, preds_index.flatten())
+        preds_str = pred_decode(alphabet_list, preds_index.flatten(), ctc=cfg.train.loss.type == 'ctc')
         confidence_score = preds_max_prob.flatten().cumprod(axis=0)[-1]
         matched = (gt == preds_str)
         num_ok += 1 if matched else 0
-        print('file: {}, pred: {}, score: {}, matched: {}'.format(os.path.basename(image_path), preds_str, confidence_score, matched))
+        print('{}, pred: {}, score: {:.2}, matched: {}'.format(os.path.basename(image_path), preds_str, confidence_score, matched))
         
     print(':: Accuracy: {:.3f} [{:2}/{:2}]::'.format(num_ok / len(images_list), num_ok, len(images_list)))
 
