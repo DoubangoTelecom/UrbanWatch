@@ -4,7 +4,8 @@ import torch.nn.functional as F
 from .stochastic_depth import DropPath
 from .dynamic_tanh import DynamicTanh
 from .fullyconnected import FullyConnected
-from .custom_attentions import SelfAttention
+from .custom_attentions import SelfAttention, MultiHeadAttention
+from .activations import ACTIVATIONS
 
 class Attention(Module):
     """
@@ -17,15 +18,15 @@ class Attention(Module):
         head_dim = dim // self.num_heads
         self.scale = head_dim ** -0.5
 
-        self.qkv = FullyConnected(dim, dim * 3, bias=False)
+        self.qkv = Linear(dim, dim * 3, bias=False)
         self.attn_drop = Dropout(attention_dropout)
-        self.proj = FullyConnected(dim, dim)
+        self.proj = Linear(dim, dim)
         self.proj_drop = Dropout(projection_dropout)
 
     def forward(self, x):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = torch.vsplit(qkv, 3)
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
@@ -35,7 +36,6 @@ class Attention(Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
-
 
 class MaskedAttention(Module):
     def __init__(self, dim, num_heads=8, attention_dropout=0.1, projection_dropout=0.1):
@@ -78,20 +78,21 @@ class TransformerEncoderLayer(Module):
     """
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
-                 attention_dropout=0.1, drop_path_rate=0.1):
+                 attention_dropout=0.1, drop_path_rate=0.1,
+                 norm_type='dtanh', activation_type='relu'):
         super(TransformerEncoderLayer, self).__init__()
-        self.pre_norm = DynamicTanh(d_model)
-        self.self_attn = Attention(dim=d_model, num_heads=nhead,
-                                   attention_dropout=attention_dropout, projection_dropout=dropout) if nhead > 1 else SelfAttention(in_features=d_model, attention_dropout=attention_dropout)
+        self.pre_norm = DynamicTanh(d_model) if norm_type=='dtanh' else LayerNorm(d_model)
+        self.self_attn = MultiHeadAttention(dim=d_model, num_heads=nhead,
+                                   attention_dropout=attention_dropout, projection_dropout=dropout) if nhead > 1 else SelfAttention(in_features=d_model, attention_dropout=attention_dropout, projection_dropout=dropout)
         self.linear1 = FullyConnected(d_model, dim_feedforward)
         self.dropout1 = Dropout(dropout)
-        self.norm1 = DynamicTanh(d_model)
+        self.norm1 = DynamicTanh(d_model) if norm_type=='dtanh' else LayerNorm(d_model)
         self.linear2 = FullyConnected(dim_feedforward, d_model)
         self.dropout2 = Dropout(dropout)
 
         self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0 else Identity()
 
-        self.activation = F.relu
+        self.activation = ACTIVATIONS[activation_type]
 
     def forward(self, src: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         src = src + self.drop_path(self.self_attn(self.pre_norm(src)))
@@ -143,7 +144,9 @@ class TransformerClassifier(Module):
                  attention_dropout=0.1,
                  stochastic_depth=0.1,
                  positional_embedding='learnable',
-                 sequence_length=None):
+                 sequence_length=None,
+                 norm_type='dtanh',
+                 activation_type='relu'):
         super().__init__()
         positional_embedding = positional_embedding if \
             positional_embedding in ['sine', 'learnable', 'none'] else 'sine'
@@ -163,7 +166,7 @@ class TransformerClassifier(Module):
                                        requires_grad=True)
             self.num_tokens = 1
         else:
-            self.attention_pool = FullyConnected(self.embedding_dim, 1)
+            self.attention_pool = FullyConnected(self.embedding_dim, 1 if num_classes > 0 else sequence_length)
 
         if positional_embedding != 'none':
             if positional_embedding == 'learnable':
@@ -181,9 +184,10 @@ class TransformerClassifier(Module):
         self.blocks = ModuleList([
             TransformerEncoderLayer(d_model=embedding_dim, nhead=num_heads,
                                     dim_feedforward=dim_feedforward, dropout=dropout,
-                                    attention_dropout=attention_dropout, drop_path_rate=dpr[i])
+                                    attention_dropout=attention_dropout, drop_path_rate=dpr[i],
+                                    norm_type=norm_type, activation_type=activation_type)
             for i in range(num_layers)])
-        self.norm = DynamicTanh(embedding_dim)
+        self.norm = DynamicTanh(embedding_dim) if norm_type == 'dtanh' else LayerNorm(embedding_dim)
         self.fc = FullyConnected(embedding_dim, num_classes) if num_classes > 0 else None
         self.apply(self.init_weight)
 
@@ -204,11 +208,15 @@ class TransformerClassifier(Module):
             x = blk(x)
         
         x = self.norm(x)
+
+        if self.seq_pool:
+            x = torch.matmul(F.softmax(self.attention_pool(x), dim=1).transpose(-1, -2), x)
+            if self.fc:
+                x = x.squeeze(-2)
+        else:
+            x = x[:, 0]
+
         if self.fc:
-            if self.seq_pool:
-                x = torch.matmul(F.softmax(self.attention_pool(x), dim=1).transpose(-1, -2), x).squeeze(-2)
-            else:
-                x = x[:, 0]
             x = self.fc(x)
         
         return x
@@ -219,7 +227,7 @@ class TransformerClassifier(Module):
             init.trunc_normal_(m.weight, std=.02)
             if isinstance(m, Linear) and m.bias is not None:
                 init.constant_(m.bias, 0)
-        elif isinstance(m, LayerNorm):
+        elif isinstance(m, LayerNorm) or isinstance(m, DynamicTanh):
             init.constant_(m.bias, 0)
             init.constant_(m.weight, 1.0)
 
@@ -327,7 +335,7 @@ class MaskedTransformerClassifier(Module):
             init.trunc_normal_(m.weight, std=.02)
             if isinstance(m, Linear) and m.bias is not None:
                 init.constant_(m.bias, 0)
-        elif isinstance(m, LayerNorm):
+        elif isinstance(m, LayerNorm) or isinstance(m, DynamicTanh):
             init.constant_(m.bias, 0)
             init.constant_(m.weight, 1.0)
 

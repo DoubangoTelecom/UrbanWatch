@@ -46,48 +46,26 @@ class AOCR(nn.Module):
         self.sequence_length = self.cct.tokenizer.sequence_length
         if not self.cct.classifier.seq_pool:
             self.sequence_length += 1
-        if cfg.train.loss.type == 'ce':
-            if cfg.model.projection.fc:
-                if False: # using Conv2d: faster, more accurate, lower weights size...
-                    self.projection = nn.Sequential(
-                        Rearrange('b c h -> b (c h) () ()'),
-                        nn.Dropout2d(cfg.model.projection.dropout),
-                        nn.Conv2d((self.sequence_length*self.cct.tokenizer.output_channels), (cfg.model.max_len*self.alphabet_size), 1), # Using Conv2d instead of FullyConnected (not NPU friendly)
-                        ReshapeProjection((-1, cfg.model.max_len, self.alphabet_size)),
-                    )
-                else:
-                    self.projection = nn.Sequential(
-                        ReshapeProjection((-1, (self.sequence_length*self.cct.tokenizer.output_channels))),
-                        nn.Dropout(cfg.model.projection.dropout),
-                        FullyConnected((self.sequence_length*self.cct.tokenizer.output_channels), (cfg.model.max_len*self.alphabet_size)),
-                        ReshapeProjection((-1, cfg.model.max_len, self.alphabet_size)),
-                    )
-                
-            else:
-                if True: # using Conv2d: faster, more accurate, lower weights size...
-                    self.projection = nn.Sequential(
-                        Rearrange('b c w -> b c w ()'),
-                        nn.Dropout2d(cfg.model.projection.dropout),
-                        nn.Conv2d(self.sequence_length, cfg.model.max_len, 1),
-                        Rearrange('b h c w -> b c h w'),
-                        nn.Dropout2d(cfg.model.projection.dropout),
-                        nn.Conv2d(self.cct.tokenizer.output_channels, self.alphabet_size, 1),
-                        Rearrange('b c h w -> b h (c w)'),
-                    )
-                else:
-                    self.projection = nn.Sequential(
-                        Rearrange('batch seqlen channels -> batch channels seqlen'),
-                        nn.Dropout(cfg.model.projection.dropout),
-                        FullyConnected(self.sequence_length, cfg.model.max_len),
-                        Rearrange('batch channels seqlen -> batch seqlen channels'),
-                        nn.Dropout(cfg.model.projection.dropout),
-                        FullyConnected(self.cct.tokenizer.output_channels, self.alphabet_size)
-                    )
-        else:
+
+        max_len_mul = 2 if cfg.train.loss.type == 'ctc' else 1 # mul max_len by 2 for ctc
+        if cfg.model.projection.fc:
             self.projection = nn.Sequential(
                 nn.Dropout(cfg.model.projection.dropout),
-                FullyConnected(self.cct.tokenizer.output_channels, self.alphabet_size)
+                Rearrange('batch seqlen channels -> batch seqlen channels ()'), # batch seqlen channels 1 
+                nn.Conv2d(self.sequence_length, cfg.model.max_len * max_len_mul, 1), # batch max_len channels 1
+                Rearrange('batch max_len channels 1 -> batch max_len (channels 1)'), # batch max_len channels
+                FullyConnected(self.cct.tokenizer.output_channels, self.alphabet_size) # batch max_len alphabet_size
             )
+        else:
+            self.projection = nn.Sequential(
+                Rearrange('b c w -> b c w ()'),
+                nn.Dropout2d(cfg.model.projection.dropout),
+                nn.Conv2d(self.sequence_length, cfg.model.max_len * max_len_mul, 1),
+                Rearrange('b h c w -> b c h w'),
+                nn.Conv2d(self.cct.tokenizer.output_channels, self.alphabet_size, 1),
+                Rearrange('b c h w -> b h (c w)'),
+            )
+                
     
     def _set_export_mode(self, mode: str):
         # 'stn': export STN module only (with ablation)

@@ -15,11 +15,11 @@ class FocalLoss(nn.Module):
         return (self.alpha * (1-pt)**self.gamma * loss).mean()
     
     @staticmethod
-    def build(type: str, alpha :float=0.25, gamma :float=2.0, blank :int=0) -> nn.Module:
+    def build(type: str, alpha :float=0.25, gamma :float=2.0, blank :int=0, label_smoothing:float=0.0) -> nn.Module:
         if type == 'ctc':
             return FocalLossCTC(alpha, gamma, blank)
         else:
-            return FocalLossCE(alpha, gamma)
+            return FocalLossCE(alpha, gamma, label_smoothing)
         
 class FocalLossCTC(FocalLoss):
     def __init__(self, alpha :float=0.25, gamma :float=2.0, blank :int=0):
@@ -31,11 +31,15 @@ class FocalLossCTC(FocalLoss):
         return self._focal(self.criterion(log_probs, targets, input_lengths, target_lengths))
     
 class FocalLossCE(FocalLoss):
-    def __init__(self, alpha :float=0.25, gamma :float=2.0):
+    def __init__(self, alpha :float=0.25, gamma :float=2.0, label_smoothing:float=0.0):
         """https://github.com/jimitshah77/Focal-CTC-OMR"""
         super(FocalLossCE, self).__init__('ce', alpha, gamma)
-        self.criterion = torch.nn.CrossEntropyLoss(reduction='none', reduce=False)
+        self.criterion = torch.nn.CrossEntropyLoss(
+            reduction='none', 
+            reduce=False, 
+            label_smoothing=label_smoothing
+            )
         
     def forward(self, inputs, targets) -> torch.Tensor:
         return self._focal(self.criterion(inputs, targets))
-
+        

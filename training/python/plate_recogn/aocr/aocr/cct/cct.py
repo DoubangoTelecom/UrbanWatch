@@ -1,7 +1,7 @@
 from torch.hub import load_state_dict_from_url
 import torch.nn as nn
 from .utils.transformers import TransformerClassifier
-from .utils.tokenizer import Tokenizer, MNV4Tokenizer, VGGTokenizer
+from .utils.tokenizer import Tokenizer, MNV4Tokenizer, ResNet18Tokenizer, VGGTokenizer
 from .utils.helpers import pe_check, fc_check
 
 try:
@@ -41,6 +41,8 @@ class CCT_AOCR(nn.Module):
                  num_heads=1,
                  mlp_ratio=4.0,
                  positional_embedding='learnable',
+                 norm_type='dtanh',
+                 activation_type='relu',
                  *args, **kwargs):
         super(CCT_AOCR, self).__init__()
                 
@@ -50,18 +52,27 @@ class CCT_AOCR(nn.Module):
                 input_channels=n_input_channels,
                 block_size=backbone.mnv4.block_size,
                 width_mult=backbone.mnv4.width_mult,
-                out_stage=backbone.mnv4.out_stage
+                out_stage=backbone.mnv4.out_stage,
+                activation_type=backbone.mnv4.activation
             )
+        elif backbone.type == 'resnet18':
+            self.tokenizer = ResNet18Tokenizer(
+                            imgh, imgw,
+                            input_channels=n_input_channels,
+                            width_mult=backbone.resnet18.width_mult,
+                            out_stage=backbone.resnet18.out_stage,
+                            activation_type=backbone.resnet18.activation
+                        )
         else:
             assert backbone.type == 'vgg', f'Invalid backbone type: {backbone.type}'
             self.tokenizer = VGGTokenizer(
                 imgh, imgw,
                 input_channels=n_input_channels,
-                output_channel=backbone.vgg.channels
+                output_channel=backbone.vgg.channels,
+                activation_type=backbone.vgg.activation
             )
         
         self.classifier = TransformerClassifier(
-            sequence_length=self.tokenizer.sequence_length,
             embedding_dim=self.tokenizer.output_channels,
             seq_pool=seq_pool,
             dropout=dropout,
@@ -71,7 +82,10 @@ class CCT_AOCR(nn.Module):
             num_heads=num_heads,
             mlp_ratio=mlp_ratio,
             num_classes=0,
-            positional_embedding=positional_embedding
+            positional_embedding=positional_embedding,
+            sequence_length=self.tokenizer.sequence_length,
+            norm_type=norm_type,
+            activation_type=activation_type
         )
 
     def forward(self, x):

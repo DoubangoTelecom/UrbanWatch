@@ -116,6 +116,9 @@ def train(cfg):
     """ model name """
     print(f'Model info: {cfg.model}\nOutChannels: {model.module.cct.tokenizer.output_channels}\nSeqlen: {model.module.sequence_length}')
     
+    """ number of workers """
+    print(f'Num workers: {cfg.train.workers}')
+
     """ start training """
     start_iter = 0
     if model_path != '':

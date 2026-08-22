@@ -72,6 +72,7 @@ def export(cfg, opt):
     converter.inference_output_type = tf.float32
     converter._experimental_disable_per_channel = not (opt.per_channel == "True")
     converter._experimental_new_quantizer = True
+    converter._experimental_disable_batchmatmul_unfold=True
     # Enable more aggressive quantization analysis
     converter._experimental_calibrate_quantization = True
     

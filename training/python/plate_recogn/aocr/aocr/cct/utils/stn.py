@@ -80,7 +80,7 @@ class StnTPS(Stn):
                 return F.grid_sample(input, grid, mode=mode, padding_mode=padding_mode)
         else:
             assert mode=='bilinear', 'Mode must be bilinear, but is {}'.format(mode)
-            return TPS_SpatialTransformerNetwork._bilinear_grid_sample_(input, grid, padding_mode, align_corners)
+            return StnTPS._bilinear_grid_sample_(input, grid, padding_mode, align_corners)
         
     
     # Base on https://github.com/open-mmlab/mmcv/blob/90d83c94cfb967ef162c449faf559616f31f28c2/mmcv/ops/point_sample.py#L12

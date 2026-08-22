@@ -133,7 +133,9 @@ def hierarchical_dataset(root, opt, select_data='/'):
                     break
 
             if select_flag:
-                dataset = LmdbDataset(dirpath, opt)
+                # TODO(dmi): LMDB doesn't support muli-workers(hangs), replaced by Doubango dataset
+                dataset = DoubangoDataset(dirpath, opt)
+                #dataset = LmdbDataset(dirpath, opt)
                 sub_dataset_log = f'sub-directory:\t/{os.path.relpath(dirpath, root)}\t num samples: {len(dataset)}'
                 print(sub_dataset_log)
                 dataset_log += f'{sub_dataset_log}\n'
@@ -143,13 +145,97 @@ def hierarchical_dataset(root, opt, select_data='/'):
 
     return concatenated_dataset, dataset_log
 
-
-class LmdbDataset(Dataset):
-    
+class TrainValDataSet(Dataset):
     def __init__(self, root, opt):
-        import lmdb
         self.root = root
         self.opt = opt
+
+        # Geometric transformations
+        self.warp = ShapeTransform(
+            **opt.augment.warp._asdict(),
+        )
+
+    def _augment(self, img):
+        # Geometry
+        if random.randint(0, 3) == 0 or True:
+            img = self.warp(img)
+        
+        # Texture
+        if random.randint(0, 2) == 0:
+            from imgaug import augmenters as iaa        
+            sequence = []
+            activate_fn = lambda: random.randint(0, 2) == 0 # pick 1/4 only, otherwise tooo slow
+            if activate_fn():
+                sequence.append(iaa.GaussianBlur(sigma=tuple(self.opt.augment.texture.gaussian_blur)))
+            if activate_fn():
+                sequence.append(iaa.Multiply(mul=tuple(self.opt.augment.texture.multiply), per_channel=random.choice([False, True])))
+            if activate_fn():
+                sequence.append(iaa.MultiplyHue(mul=tuple(self.opt.augment.texture.multiply_hue)))
+            if activate_fn():
+                sequence.append(iaa.MultiplySaturation(mul=tuple(self.opt.augment.texture.multiply_saturation)))
+            if activate_fn():
+                sequence.append(iaa.GammaContrast(gamma=tuple(self.opt.augment.texture.gamma_contrast), per_channel=random.choice([False, True])))
+            if activate_fn():
+                sequence.append(iaa.AdditiveGaussianNoise(scale=self.opt.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, True])))
+
+            # Apply transformation
+            if len(sequence) > 0:
+                transforms = iaa.Sequential(sequence, random_order=True)
+                img = transforms(images=[img])[0]
+
+        # Randomly inverse
+        if random.randint(0, 4) == 0:
+            img = 255 - img
+
+        return img
+    
+    def _post_process(self, img, label):
+        # We only train and evaluate on alphanumerics (or pre-defined character set in train.py)
+        out_of_char = f'[^{self.opt.model.alphabet}]'
+        label = re.sub(out_of_char, '', label)[:self.opt.model.max_len]
+
+        if self.opt.augment.enabled:
+            img = Image.fromarray(self._augment(np.array(img)), 'RGB')
+            
+        if self.opt.model.grayscale:
+            img = img.convert('L')
+
+        return (img, label)
+
+class DoubangoDataset(TrainValDataSet):
+    def __init__(self, root, opt):
+        super().__init__(root, opt)
+
+        # read gt
+        with open(os.path.join(self.root, "texts.txt"), "r") as f:
+            self.texts = f.read().splitlines()
+            print(f'[{self.root}] Number of gt: {len(self.texts)}')
+        
+        # read images list
+        with open(os.path.join(self.root, "imgs.txt"), "r") as f:
+            self.imgs = f.read().splitlines()
+            print(f'[{self.root}] Number of imgs: {len(self.imgs)}')
+
+        assert len(self.texts) == len(self.imgs), f'Number of images({len(self.imgs)}) different than number of gt({len(self.texts)})'
+
+    def __len__(self):
+        return len(self.imgs)
+    
+    def __getitem__(self, index, **kwargs):
+        name = self.imgs[index % len(self.imgs)]
+        label = self.texts[index % len(self.texts)]
+
+        img = Image.open(os.path.join(self.root, name)).convert('RGB')
+
+        return self._post_process(img, label)
+
+class LmdbDataset(TrainValDataSet):
+    
+    def __init__(self, root, opt):
+        super().__init__(root, opt)
+        import lmdb
+        self.root = root
+        
         self.env = lmdb.open(root, max_readers=32, readonly=True, lock=False, readahead=False, meminit=False)
         if not self.env:
             print('cannot create lmdb from %s' % (root))
@@ -159,12 +245,6 @@ class LmdbDataset(Dataset):
             nSamples = int(txn.get('num-samples'.encode()))
             self.nSamples = nSamples
             self.filtered_index_list = [index + 1 for index in range(self.nSamples)]
-            
-        # Geometric transformations
-        self.warp = ShapeTransform(
-            **opt.augment.warp._asdict(),
-        )
-            
 
     def __len__(self):
         return self.nSamples
@@ -191,52 +271,8 @@ class LmdbDataset(Dataset):
             img = Image.new('RGB', (self.opt.model.imgW, self.opt.model.imgH))
             label = '[dummy_label]'
 
-        # We only train and evaluate on alphanumerics (or pre-defined character set in train.py)
-        out_of_char = f'[^{self.opt.model.alphabet}]'
-        label = re.sub(out_of_char, '', label)[:self.opt.model.max_len]
-
-        if self.opt.augment.enabled:
-            img = Image.fromarray(self._augment(np.array(img)), 'RGB')
-            
-        if self.opt.model.grayscale:
-            img = img.convert('L')
-
-        return (img, label)
+        return self._post_process(img, label)
     
-    def _augment(self, img):
-        
-        # Geometry
-        img = self.warp(img)
-        
-        # Randomly inverse
-        if random.randint(0, 4) == 0:
-            img = 255 - img
-        
-        # Texture
-        from imgaug import augmenters as iaa        
-        sequence = []
-        activate_fn = lambda: random.randint(0, 4) == 0 # pick 1/4 only, otherwise tooo slow
-        if activate_fn():
-            sequence.append(iaa.GaussianBlur(sigma=tuple(self.opt.augment.texture.gaussian_blur)))
-        if activate_fn():
-            sequence.append(iaa.Multiply(mul=tuple(self.opt.augment.texture.multiply), per_channel=random.choice([False, True])))
-        if activate_fn():
-            sequence.append(iaa.MultiplyHue(mul=tuple(self.opt.augment.texture.multiply_hue)))
-        if activate_fn():
-            sequence.append(iaa.MultiplySaturation(mul=tuple(self.opt.augment.texture.multiply_saturation)))
-        if activate_fn():
-            sequence.append(iaa.GammaContrast(gamma=tuple(self.opt.augment.texture.gamma_contrast), per_channel=random.choice([False, True])))
-        if activate_fn():
-            sequence.append(iaa.AdditiveGaussianNoise(scale=self.opt.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, True])))
-
-        # Apply transformation
-        if len(sequence) > 0:
-            transforms = iaa.Sequential(sequence, random_order=True)
-            img = transforms(images=[img])[0]
-
-        return img
-
-
 class RawDataset(Dataset):
 
     def __init__(self, root, opt):
@@ -278,8 +314,8 @@ class ResizeNormalize(object):
     def __init__(self, opt, interpolation=Image.BILINEAR):
         self.padding = opt.model.padding
         self.target_size = (opt.model.imgW, opt.model.imgH)
-        self.mean = float(opt.model.normalize[0] / 255.0)
-        self.std = float(opt.model.normalize[1] / 255.0)
+        self.mean = torch.from_numpy(np.array(opt.model.normalize[0], dtype=np.float32).reshape(3, 1, 1) / 255.0)
+        self.std_inv = 1.0 / torch.from_numpy(np.array(opt.model.normalize[1], dtype=np.float32).reshape(3, 1, 1) / 255.0)
         self.interpolation = interpolation
         self.toTensor = transforms.ToTensor()
 
@@ -292,7 +328,7 @@ class ResizeNormalize(object):
             img = image.resize(self.target_size, self.interpolation)
         # next code same as ((x - 127.5) / 127.5)
         img = self.toTensor(img) # [0-255] -> [0-1]
-        img.sub_(self.mean).div_(self.std)
+        img.sub_(self.mean).mul_(self.std_inv)
         return img
 
 
@@ -320,35 +356,14 @@ class AlignCollate(object):
 
     def __init__(self, opt):
         self.opt = opt
+        self.transform = ResizeNormalize(self.opt)
 
     def __call__(self, batch):
         batch = filter(lambda x: x is not None, batch)
         images, labels = zip(*batch)
-
-        if self.opt.model.padding and False:  # same concept with 'Rosetta' paper
-            resized_max_w = self.opt.model.imgW
-            input_channel = 3 if images[0].mode == 'RGB' else 1
-            transform = NormalizePAD((input_channel, self.opt.model.imgH, resized_max_w))
-
-            resized_images = []
-            for image in images:
-                w, h = image.size
-                ratio = w / float(h)
-                if math.ceil(self.opt.model.imgH * ratio) > self.opt.model.imgW:
-                    resized_w = self.opt.model.imgW
-                else:
-                    resized_w = math.ceil(self.opt.model.imgH * ratio)
-
-                resized_image = image.resize((resized_w, self.opt.model.imgH), Image.BICUBIC)
-                resized_images.append(transform(resized_image))
-                # resized_image.save('./image_test/%d_test.jpg' % w)
-
-            image_tensors = torch.cat([t.unsqueeze(0) for t in resized_images], 0)
-
-        else:
-            transform = ResizeNormalize(self.opt)
-            image_tensors = [transform(image) for image in images]
-            image_tensors = torch.cat([t.unsqueeze(0) for t in image_tensors], 0)
+            
+        image_tensors = [self.transform(image) for image in images]
+        image_tensors = torch.cat([t.unsqueeze(0) for t in image_tensors], 0)
 
         return image_tensors, labels
 

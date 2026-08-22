@@ -34,18 +34,17 @@ class FullyConnectedBmm(nn.Module):
 class FullyConnected(nn.Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super(FullyConnected, self).__init__()
-        self.bias = bias
         self.W = nn.Parameter(torch.empty(1, in_features, out_features), requires_grad=True) # extra dim(0) for W
         self.b = nn.Parameter(torch.empty(1, out_features), requires_grad=True) if bias else None
         
         nn.init.trunc_normal_(self.W.data, std=.02)
-        if self.bias:
+        if not self.b is None:
             nn.init.constant_(self.b.data, 0)
         
     def forward(self, x):
         squeeze_needed = (len(x.shape) == 2)
         x = x @ self.W
-        if self.bias:
+        if not self.b is None:
             x = x + self.b
         return x.squeeze(0) if squeeze_needed else x
    

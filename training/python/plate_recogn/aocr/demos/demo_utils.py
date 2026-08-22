@@ -19,7 +19,10 @@ def preprocess_image(image :Image, cfg) -> np.ndarray:
         img.paste(tmp, (0, 0))
     else:
         img = image.resize(target_size, Image.BILINEAR)    
-    return ((np.array(img).astype(np.float32) - cfg.model.normalize[0]) / cfg.model.normalize[1]).astype(np.float32)
+    
+    mean = np.array(cfg.model.normalize[0], dtype=np.float32).reshape(1, 1, 3)
+    std = np.array(cfg.model.normalize[1], dtype=np.float32).reshape(1, 1, 3)
+    return ((img.astype(np.float32) - mean) / std).astype(np.float32)
 
 def load_image(path: str, cfg, preprocess=True):
     img = Image.open(path).convert('L' if cfg.model.grayscale else 'RGB')

@@ -9,6 +9,7 @@ Modified by Mamadou DIOP (dmi) for integration with NanoDet
 import torch
 import torch.nn as nn
 import math
+from .activations import ACTIVATIONS
 
 # INFO(dmi): Check https://ritvik19.medium.com/papers-explained-232-mobilenetv4-83a526887c30 about the blocks
 block_specs_small = [
@@ -128,16 +129,6 @@ block_specs_large = [
         ['conv_bn', 1, 1, 960],
     ]
 ]
-
-class Linear(torch.nn.Module):
-    def forward(self, output):
-        return output
-    
-ACTIVATIONS = { 
-    'ReLU': nn.ReLU(inplace=True), 
-    'LeakyReLU': nn.LeakyReLU(negative_slope=0.1, inplace=True),
-    'Linear': Linear()
-}
 
 def make_divisible(value, divisor, min_value=None, round_down_protect=True):
     if min_value is None:

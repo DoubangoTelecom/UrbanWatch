@@ -134,9 +134,10 @@ class SelfAttention(nn.Module):
     def __init__(self, in_features, attention_dropout=0.1, projection_dropout=0.1):
         super(SelfAttention, self).__init__()
         # Define linear transformations for Q, K, V
-        self.query = FullyConnected(in_features, in_features)
-        self.key = FullyConnected(in_features, in_features)
-        self.value = FullyConnected(in_features, in_features)
+        self.scale = in_features ** -0.5
+        self.query = FullyConnected(in_features, in_features, bias=False)
+        self.key = FullyConnected(in_features, in_features, bias=False)
+        self.value = FullyConnected(in_features, in_features, bias=False)
         self.attn_drop = nn.Dropout(attention_dropout)
         self.proj = FullyConnected(in_features, in_features)
         self.proj_drop = nn.Dropout(projection_dropout)
@@ -148,69 +149,56 @@ class SelfAttention(nn.Module):
         V = self.value(x)
         
         # Compute the dot products between Q and K
-        scores = torch.matmul(Q, K.transpose(-2, -1))
+        # , then scale by the square root of the key dimension
+        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
         
         # then scale by the square root of the key dimension
         # TODO(dmi): "ERROR: Int64 input is not supported" on Debix A if using 'edgeai-torch'
         # ... but is ok when using onnx2tf
-        scores *= (1 / torch.sqrt(torch.tensor(Q.size(-1), dtype=torch.float32)))
+        #scores *= (1 / torch.sqrt(torch.tensor(Q.size(-1), dtype=torch.float32)))
+        #print("aaa:", (1 / torch.sqrt(torch.tensor(Q.size(-1), dtype=torch.float32))))
 
         # Softmax to normalize scores, producing attention weights
         attention_weights = F.softmax(scores, dim=-1)
         attention_weights = self.attn_drop(attention_weights)
         
         # Compute the final output as weighted values
-        output = attention_weights @ V
+        output = torch.matmul(attention_weights, V)
         
         # Projection
         output = self.proj(output)
         output = self.proj_drop(output)
-        return output     
-    
+        return output  
+
 class MultiHeadAttention(nn.Module):
-    def __init__(self, in_features, out_features, num_heads, attention_dropout=0.1, npu_friendly=False):
-        super(MultiHeadAttention, self).__init__()
-        assert in_features % num_heads == 0, "Embedding size must be divisible by number of heads"
-        
+    """
+    Obtained from timm: github.com:rwightman/pytorch-image-models
+    """
+
+    def __init__(self, dim, num_heads=8, attention_dropout=0.1, projection_dropout=0.1):
+        super().__init__()
         self.num_heads = num_heads
-        self.head_dim = in_features // num_heads
+        self.head_dim = dim // self.num_heads
+        self.scale = self.head_dim ** -0.5
 
+        self.qkv = FullyConnected(dim, dim * 3)
         self.attn_drop = nn.Dropout(attention_dropout)
-
-        # Linear layers for Q, K, V for all heads
-        self.query = nn.Linear(in_features, in_features)
-        self.key = nn.Linear(in_features, in_features)
-        self.value = nn.Linear(in_features, in_features)
-        
-        # Output linear layer
-        self.fc_out = nn.Linear(in_features, out_features)
+        self.proj = FullyConnected(dim, dim)
+        self.proj_drop = nn.Dropout(projection_dropout)
 
     def forward(self, x):
-        N, seq_len, embed_size = x.shape
-        Q = self.query(x)
-        K = self.key(x)
-        V = self.value(x)
+        B, N, C = x.shape
+        qkv = self.qkv(x).view(B, N, self.num_heads, 3*self.head_dim).permute(0, 2, 1, 3)
+        q, k, v = qkv.chunk(3, dim=-1)#torch.split(qkv, 1) # "torch.vsplit(qkv, 3)" requires ONNX >= 16 // "qkv[0], qkv[1], qkv[2]" translate to Gather and slow on GPU/NPU
 
-        # Reshape Q, K, V to (N, num_heads, seq_len, head_dim)
-        Q = Q.view(N, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        K = K.view(N, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        V = V.view(N, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        attn = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
 
-        # Compute the dot products between Q and K, then scale by the square root of the key dimension
-        scores = torch.matmul(Q, K.transpose(-2, -1)) * (1 / torch.sqrt(torch.tensor(Q.size(-1), dtype=torch.float32)))
-
-        # Softmax to normalize scores, producing attention weights
-        attention_weights = F.softmax(scores, dim=-1)
-        attention_weights = self.attn_drop(attention_weights)
-        
-        # Compute the final output as weighted values
-        out = torch.matmul(attention_weights, V)
-
-        # Perform scaled dot-product attention and concatenate heads
-        out = out.transpose(1, 2).contiguous().view(N, seq_len, embed_size)
-
-        # Final linear transformation
-        return self.fc_out(out)
+        x = torch.matmul(attn, v).permute(0, 2, 1, 3).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x   
 
 class MultiheadGQA(nn.Module):
     """Multi-head grouped query attention (GQA) layer.

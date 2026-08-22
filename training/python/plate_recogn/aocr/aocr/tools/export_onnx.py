@@ -11,7 +11,7 @@ def export(cfg, opt):
     model.load_state_dict(torch.load(opt.weights, map_location=lambda storage, loc: storage, weights_only=True))
     
     sample_args = (torch.randn(BATCH_SIZE, 1 if cfg.model.grayscale else 3, cfg.model.imgH, cfg.model.imgW), )
-    modes = ['-stn', 'stn'] if cfg.model.stn_type != "none" else ['-stn']
+    modes = ['all']#['-stn', 'stn'] if cfg.model.stn_type != "none" else ['-stn']
     for mode in modes:
         print('Exporting for mode [{}]...'.format(mode))
         model._set_export_mode(mode)
@@ -27,7 +27,7 @@ def export(cfg, opt):
             file_path,
             verbose=False,
             keep_initializers_as_inputs=True,
-            opset_version=11, # requires old torch (e.g. 1.13.1), newest one (e.g. 2.9.0) will force us to use opset-18 which is not supported by jetpack 4.x
+            opset_version=16 if ('all' in modes) else 11, # requires old torch (e.g. 1.13.1), newest one (e.g. 2.9.0) will force us to use opset-18 which is not supported by jetpack 4.x
             input_names=["input"],
             output_names=["output"],
             dynamic_axes={'input': {0: 'batch_size'},

@@ -27,27 +27,48 @@ def get_flip_matrix(prob=0.5):
     return F
 
 
-def get_perspective_matrix(perspective=0.0):
+def get_perspective_matrix(perspective, width, height):
     """
 
     :param perspective:
     :return:
     """
-    P = np.eye(3)
-    P[2, 0] = random.uniform(-perspective, perspective)  # x perspective (about y)
-    P[2, 1] = random.uniform(-perspective, perspective)  # y perspective (about x)
-    return P
+    if perspective == 0:
+        return np.eye(3)
+    else:
+        assert perspective >= 0.0 and perspective <= 0.5, f'perspective({perspective}) must be within [0, 0.5]'
+        r = random.choice([1.0, -1.0])
+        __offx = lambda: width*random.uniform(0.0,perspective) * r
+        __offy = lambda: height*random.uniform(0.0,perspective) * r
+                
+        src = np.float32([
+                [0, 0],
+                [width - 1, 0],
+                [width - 1, height - 1],
+                [0, height - 1]])
+
+        offsets = np.float32([[__offx(), __offy()],
+                                [__offx(), __offy()],
+                                [__offx(), __offy()],
+                                [__offx(), __offy()]])
+
+        dst = (src + offsets).astype(np.float32)
+        
+        H = cv2.getPerspectiveTransform(src, dst)
+        
+        return H
 
 
-def get_rotation_matrix(degree=0.0):
+def get_rotation_matrix(center, degree=0.0):
     """
 
     :param degree:
     :return:
     """
     R = np.eye(3)
-    a = random.uniform(-degree, degree)
-    R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=1)
+    if degree != 0:
+        a = random.uniform(-degree, degree)
+        R[:2] = cv2.getRotationMatrix2D(angle=a, center=center, scale=1)
     return R
 
 
@@ -75,19 +96,22 @@ def get_stretch_matrix(width_ratio=(1, 1), height_ratio=(1, 1)):
     return Str
 
 
-def get_shear_matrix(degree):
+def get_shear_matrix(degree=(0, 0)):
     """
 
     :param degree:
     :return:
     """
+    assert len(degree) == 2, f'{degree} must be list of 2'
     Sh = np.eye(3)
-    Sh[0, 1] = math.tan(
-        random.uniform(-degree, degree) * math.pi / 180
-    )  # x shear (deg)
-    Sh[1, 0] = math.tan(
-        random.uniform(-degree, degree) * math.pi / 180
-    )  # y shear (deg)
+    if degree[0] != 0:
+        Sh[0, 1] = math.tan(
+            random.uniform(-degree[0], degree[0]) * math.pi / 180
+        )  # x shear (deg)
+    if degree[1] != 0:
+        Sh[1, 0] = math.tan(
+            random.uniform(-degree[1], degree[1]) * math.pi / 180
+        )  # y shear (deg)
     return Sh
 
 
@@ -145,7 +169,7 @@ class ShapeTransform:
         scale: Tuple[int, int] = (1, 1),
         stretch: Tuple = ((1, 1), (1, 1)),
         rotation: float = 0.0,
-        shear: float = 0.0,
+        shear: float = (0, 0),
         translate: float = 0.0,
         flip: float = 0.0,
         **kwargs
@@ -159,34 +183,30 @@ class ShapeTransform:
         self.translate_ratio = translate
 
     def __call__(self, raw_img):
-        height = raw_img.shape[0]  # shape(h,w,c)
-        width = raw_img.shape[1]
+        height, width = raw_img.shape[:2]
 
-        # center
-        C = np.eye(3)
-        C[0, 2] = -width / 2
-        C[1, 2] = -height / 2
+        M = np.eye(3)
 
-        P = get_perspective_matrix(self.perspective)
-        C = P @ C
+        P = get_perspective_matrix(self.perspective, width, height)
+        M = P @ M
 
         Scl = get_scale_matrix(self.scale_ratio)
-        C = Scl @ C
+        M = Scl @ M
 
         Str = get_stretch_matrix(*self.stretch_ratio)
-        C = Str @ C
+        M = Str @ M
 
-        R = get_rotation_matrix(self.rotation_degree)
-        C = R @ C
+        R = get_rotation_matrix((width*0.5, height*0.5), self.rotation_degree)
+        M = R @ M
 
         Sh = get_shear_matrix(self.shear_degree)
-        C = Sh @ C
+        M = Sh @ M
 
         F = get_flip_matrix(self.flip_prob)
-        C = F @ C
+        M = F @ M
 
         T = get_translate_matrix(self.translate_ratio, width, height)
-        M = T @ C
+        M = T @ M
 
         img = self._perspective_warp(raw_img, M)
         return img
@@ -204,4 +224,4 @@ class ShapeTransform:
         translate[0, 2] = -xmin
         translate[1, 2] = -ymin
         corrected_transform = np.matmul(translate, transform)
-        return cv2.warpPerspective(image, corrected_transform, (math.ceil(xmax - xmin), math.ceil(ymax - ymin)), borderValue=random.randint(0, 255),  borderMode=random.choice([cv2.BORDER_CONSTANT, cv2.BORDER_REPLICATE]))
+        return cv2.warpPerspective(image, corrected_transform, (math.ceil(xmax - xmin), math.ceil(ymax - ymin)), borderValue=random.randint(0, 255),  borderMode=random.choice([cv2.BORDER_CONSTANT, cv2.BORDER_CONSTANT]))
