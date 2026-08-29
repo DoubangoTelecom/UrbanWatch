@@ -36,7 +36,11 @@ class ResNet18(nn.Module):
         assert out_stage > 0 and out_stage <= 4, 'OutStage must be within [1,4]'
         self.out_stage = out_stage
         self.channels = [
-            int(width_mult*32), int(width_mult*64), int(width_mult*128), int(width_mult*256), int(width_mult*512)
+            int(width_mult*32),  # 0
+            int(width_mult*64),  # 1
+            int(width_mult*128), # 2
+            int(width_mult*256), # 3
+            int(width_mult*512)  # 4
         ]
         self.output_channels = self.channels[out_stage]
         self.inchannel = self.channels[0]
