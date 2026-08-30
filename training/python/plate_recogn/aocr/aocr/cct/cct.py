@@ -32,6 +32,8 @@ class CCT_AOCR(nn.Module):
     def __init__(self,
                  imgh=112,imgw=112,
                  n_input_channels=1,
+                 seq_len=11,
+                 proj_dropout=0.1,
                  backbone={'type':'vgg', 'vgg': {'channels': 160}},
                  seq_pool=True,
                  dropout=0.,
@@ -50,6 +52,8 @@ class CCT_AOCR(nn.Module):
             self.tokenizer = MNV4Tokenizer(
                 imgh, imgw,
                 input_channels=n_input_channels,
+                seq_len=seq_len,
+                proj_dropout=proj_dropout,
                 block_size=backbone.mnv4.block_size,
                 width_mult=backbone.mnv4.width_mult,
                 out_stage=backbone.mnv4.out_stage,
@@ -59,6 +63,8 @@ class CCT_AOCR(nn.Module):
             self.tokenizer = ResNet18Tokenizer(
                             imgh, imgw,
                             input_channels=n_input_channels,
+                            seq_len=seq_len,
+                            proj_dropout=proj_dropout,
                             width_mult=backbone.resnet18.width_mult,
                             out_stage=backbone.resnet18.out_stage,
                             activation_type=backbone.resnet18.activation
@@ -68,12 +74,14 @@ class CCT_AOCR(nn.Module):
             self.tokenizer = VGGTokenizer(
                 imgh, imgw,
                 input_channels=n_input_channels,
+                seq_len=seq_len,
+                proj_dropout=proj_dropout,
                 output_channel=backbone.vgg.channels,
                 activation_type=backbone.vgg.activation
             )
         
         self.classifier = TransformerClassifier(
-            embedding_dim=self.tokenizer.output_channels,
+            embedding_dim=self.tokenizer.projection.output_channels,
             seq_pool=seq_pool,
             dropout=dropout,
             attention_dropout=attention_dropout,
@@ -83,7 +91,7 @@ class CCT_AOCR(nn.Module):
             mlp_ratio=mlp_ratio,
             num_classes=0,
             positional_embedding=positional_embedding,
-            sequence_length=self.tokenizer.sequence_length,
+            sequence_length=self.tokenizer.projection.sequence_length_out,
             norm_type=norm_type,
             activation_type=activation_type
         )

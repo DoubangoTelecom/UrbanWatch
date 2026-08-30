@@ -114,7 +114,7 @@ def train(cfg):
         opt_file.write(opt_log)
         
     """ model name """
-    print(f'Model info: {cfg.model}\nOutChannels: {model.module.cct.tokenizer.output_channels}\nSeqlen: {model.module.sequence_length}')
+    print(f'Model info: {cfg.model}\nChannels: in->{model.module.cct.tokenizer.projection.output_channels}, out->{model.module.alphabet_size}\nSeqlen: in->{model.module.sequence_length_in}, out->{model.module.sequence_length_out}')
     
     """ number of workers """
     print(f'Num workers: {cfg.train.workers}')

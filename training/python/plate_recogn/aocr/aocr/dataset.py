@@ -184,7 +184,7 @@ class TrainValDataSet(Dataset):
                 img = transforms(images=[img])[0]
 
         # Randomly inverse
-        if random.randint(0, 4) == 0:
+        if random.randint(0, 5) == 0:
             img = 255 - img
 
         return img

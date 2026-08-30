@@ -34,36 +34,33 @@ class AOCR(nn.Module):
         self.cct = CCT_AOCR(
             imgh=cfg.model.imgH, imgw=cfg.model.imgW,
             n_input_channels=1 if cfg.model.grayscale else 3,
+            seq_len=cfg.model.max_len * (2 if cfg.train.loss.type == 'ctc' else 1),
+            proj_dropout=cfg.model.projection.dropout,
             **cfg.model.cct._asdict()
         )
         
         # Make sure sequence length not too short (at least 3 times max_len)
+        self.sequence_length_in = self.cct.tokenizer.projection.sequence_length_in
+        self.sequence_length_out = self.cct.tokenizer.projection.sequence_length_out
         if cfg.train.loss.type == 'ctc':
-            assert self.cct.tokenizer.sequence_length > 3 * cfg.model.max_len, 'Sequence length is too short ({} < {})'.format(self.cct.tokenizer.sequence_length, 3 * cfg.model.max_len)
+            assert self.sequence_length_out > 3 * cfg.model.max_len, 'Sequence length is too short ({} < {})'.format(self.sequence_length_out, 3 * cfg.model.max_len)
         
         # Classification
         self.alphabet_size = len(list(cfg.model.alphabet)) + 1 # +1 for CTC blank character
-        self.sequence_length = self.cct.tokenizer.sequence_length
         if not self.cct.classifier.seq_pool:
-            self.sequence_length += 1
+            self.sequence_length_out += 1
 
-        max_len_mul = 2 if cfg.train.loss.type == 'ctc' else 1 # mul max_len by 2 for ctc
         if cfg.model.projection.fc:
             self.projection = nn.Sequential(
                 nn.Dropout(cfg.model.projection.dropout),
-                Rearrange('batch seqlen channels -> batch seqlen channels ()'), # batch seqlen channels 1 
-                nn.Conv2d(self.sequence_length, cfg.model.max_len * max_len_mul, 1), # batch max_len channels 1
-                Rearrange('batch max_len channels 1 -> batch max_len (channels 1)'), # batch max_len channels
-                FullyConnected(self.cct.tokenizer.output_channels, self.alphabet_size) # batch max_len alphabet_size
+                FullyConnected(self.cct.tokenizer.projection.output_channels, self.alphabet_size)
             )
         else:
             self.projection = nn.Sequential(
-                Rearrange('b c w -> b c w ()'),
+                Rearrange('b s c -> b c s ()'),
                 nn.Dropout2d(cfg.model.projection.dropout),
-                nn.Conv2d(self.sequence_length, cfg.model.max_len * max_len_mul, 1),
-                Rearrange('b h c w -> b c h w'),
-                nn.Conv2d(self.cct.tokenizer.output_channels, self.alphabet_size, 1),
-                Rearrange('b c h w -> b h (c w)'),
+                nn.Conv2d(self.cct.tokenizer.projection.output_channels, self.alphabet_size, 1),
+                Rearrange('b c s 1 -> b s (c 1)'),
             )
                 
     

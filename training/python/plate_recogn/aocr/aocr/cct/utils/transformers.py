@@ -18,15 +18,15 @@ class Attention(Module):
         head_dim = dim // self.num_heads
         self.scale = head_dim ** -0.5
 
-        self.qkv = Linear(dim, dim * 3, bias=False)
+        self.qkv = FullyConnected(dim, dim * 3, bias=False)
         self.attn_drop = Dropout(attention_dropout)
-        self.proj = Linear(dim, dim)
+        self.proj = FullyConnected(dim, dim)
         self.proj_drop = Dropout(projection_dropout)
 
     def forward(self, x):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        q, k, v = qkv.unbind(0)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
