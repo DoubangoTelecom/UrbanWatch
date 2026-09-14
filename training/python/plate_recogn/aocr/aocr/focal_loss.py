@@ -28,7 +28,8 @@ class FocalLossCTC(FocalLoss):
         self.criterion = torch.nn.CTCLoss(blank=blank, reduction='none', zero_infinity=True)
         
     def forward(self, log_probs: torch.Tensor, targets: torch.Tensor, input_lengths: torch.Tensor, target_lengths: torch.Tensor) -> torch.Tensor:
-        return self._focal(self.criterion(log_probs, targets, input_lengths, target_lengths))
+        loss = self.criterion(log_probs, targets, input_lengths, target_lengths)
+        return self._focal(loss) if self.gamma > 0.0 else loss.mean()
     
 class FocalLossCE(FocalLoss):
     def __init__(self, alpha :float=0.25, gamma :float=2.0, label_smoothing:float=0.0):
@@ -41,5 +42,6 @@ class FocalLossCE(FocalLoss):
             )
         
     def forward(self, inputs, targets) -> torch.Tensor:
-        return self._focal(self.criterion(inputs, targets))
+        loss = self.criterion(inputs, targets)
+        return self._focal(loss) if self.gamma > 0.0 else loss.mean()
         

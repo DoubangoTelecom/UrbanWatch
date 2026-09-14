@@ -148,6 +148,17 @@ def get_minimum_dst_shape(
         dst_h = max(divisible, int((dst_h + divisible - 1) // divisible * divisible))
     return dst_w, dst_h
 
+def translate(img, translate, width, height):
+    return cv2.copyMakeBorder(
+        img,
+        top=int(random.uniform(0, translate)*height),
+        bottom=int(random.uniform(0, translate)*height),
+        left=int(random.uniform(0, translate)*width),
+        right=int(random.uniform(0, translate)*width),
+        borderType=cv2.BORDER_CONSTANT,
+        value=[random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
+    )
+
 class ShapeTransform:
     """Shape transforms including resize, random perspective, random scale,
     random stretch, random rotation, random shear, random translate,
@@ -205,10 +216,13 @@ class ShapeTransform:
         F = get_flip_matrix(self.flip_prob)
         M = F @ M
 
-        T = get_translate_matrix(self.translate_ratio, width, height)
-        M = T @ M
+        # will be undone by "_perspective_warp()"
+        #T = get_translate_matrix(self.translate_ratio, width, height)
+        #M = T @ M
 
         img = self._perspective_warp(raw_img, M)
+        img = translate(img, self.translate_ratio, width, height)
+
         return img
 
     # https://stackoverflow.com/a/59741739
@@ -224,4 +238,12 @@ class ShapeTransform:
         translate[0, 2] = -xmin
         translate[1, 2] = -ymin
         corrected_transform = np.matmul(translate, transform)
-        return cv2.warpPerspective(image, corrected_transform, (math.ceil(xmax - xmin), math.ceil(ymax - ymin)), borderValue=random.randint(0, 255),  borderMode=random.choice([cv2.BORDER_CONSTANT, cv2.BORDER_CONSTANT]))
+        return cv2.warpPerspective(
+            image, 
+            corrected_transform, 
+            (math.ceil(xmax - xmin), math.ceil(ymax - ymin)), 
+            borderValue=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)), 
+            borderMode=random.choice([cv2.BORDER_CONSTANT, cv2.BORDER_CONSTANT]),
+            flags=random.choice([cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, cv2.INTER_LANCZOS4])
+        )
+

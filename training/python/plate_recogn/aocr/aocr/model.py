@@ -43,7 +43,7 @@ class AOCR(nn.Module):
         self.sequence_length_in = self.cct.tokenizer.projection.sequence_length_in
         self.sequence_length_out = self.cct.tokenizer.projection.sequence_length_out
         if cfg.train.loss.type == 'ctc':
-            assert self.sequence_length_out > 3 * cfg.model.max_len, 'Sequence length is too short ({} < {})'.format(self.sequence_length_out, 3 * cfg.model.max_len)
+            assert self.sequence_length_out >= 2 * cfg.model.max_len, 'Sequence length is too short ({} < {})'.format(self.sequence_length_out, 2 * cfg.model.max_len)
         
         # Classification
         self.alphabet_size = len(list(cfg.model.alphabet)) + 1 # +1 for CTC blank character

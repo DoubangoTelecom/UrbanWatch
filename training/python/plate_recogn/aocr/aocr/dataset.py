@@ -156,8 +156,10 @@ class TrainValDataSet(Dataset):
         )
 
     def _augment(self, img):
-        # Geometry
-        if random.randint(0, 3) == 0 or True:
+
+        # Geometry (1st try)
+        warp_now = random.choice([True, False])
+        if warp_now:
             img = self.warp(img)
         
         # Texture
@@ -177,6 +179,10 @@ class TrainValDataSet(Dataset):
                 sequence.append(iaa.GammaContrast(gamma=tuple(self.opt.augment.texture.gamma_contrast), per_channel=random.choice([False, True])))
             if activate_fn():
                 sequence.append(iaa.AdditiveGaussianNoise(scale=self.opt.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, True])))
+            if activate_fn():
+                sequence.append(iaa.Grayscale(alpha=tuple(self.opt.augment.texture.gray)))
+            if activate_fn():
+                sequence.append(iaa.ChangeColorTemperature(kelvin=tuple(self.opt.augment.texture.temperaure)))
 
             # Apply transformation
             if len(sequence) > 0:
@@ -186,6 +192,10 @@ class TrainValDataSet(Dataset):
         # Randomly inverse
         if random.randint(0, 5) == 0:
             img = 255 - img
+
+        # Geometry (2nd try)
+        if not warp_now:
+            img = self.warp(img)
 
         return img
     

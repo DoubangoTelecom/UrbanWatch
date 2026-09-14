@@ -11,6 +11,9 @@ FOLDERS = {
             ## Collected ##
             "collected/000/",
             "collected/001/",
+            "collected/002/",
+            "collected/003/",
+            "collected/004/",
 
             ## From customers ##
             "mexico/seguritech/imagenes_carros/",
@@ -164,11 +167,60 @@ FOLDERS = {
             "websites/www.platesmania.com/uz/",
             "websites/www.platesmania.com/xx/",
 
-    ] # end-of-"latin"
+    ], # end-of-"latin"
+
+    "korean": [
+        "collected/000/",
+
+        "dico-tech/000/",
+        "dico-tech/001/",
+        "dico-tech/002/",
+        "dico-tech/003/",
+        "dico-tech/004/",
+        "dico-tech/005/",
+        "dico-tech/006/",
+        "dico-tech/007/",
+        "dico-tech/008/",
+        "dico-tech/009/",
+        "dico-tech/010/",
+        "dico-tech/platesmania/",
+
+        "dico-tech-augmented/",
+
+        "generated/augmented/",
+        "generated/perspective/",
+        "generated/transformed",
+
+        "platesmania/Cars2007/",
+        "platesmania/Commercial_vehicles/",
+        "platesmania/Electric_vehicles/",
+        "platesmania/Scrapped/",
+
+    ],
+
+    "chinese": [
+        "CCPD2019/",
+        "CCPD2020/",
+
+        "fake_chs/001/",
+        "fake_chs/002/",
+
+        "platesmania/cropped/augmented/1/",
+        "platesmania/cropped/augmented/2/",
+        "platesmania/cropped/augmented/5/",
+
+        "platesmania/generated/augmented/1/",
+        "platesmania/generated/augmented/2/",
+        "platesmania/generated/augmented/3/",
+        "platesmania/generated/augmented/5/",
+        "platesmania/generated/augmented/6/",
+
+        "platesmania/scrap/",
+
+    ], # end-of-"chinese"
 
 
-
-} # end-of-FOLDER
+ } # end-of-FOLDER
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -261,10 +313,11 @@ if __name__ == '__main__':
                 
                 image = Image.open(file).convert('RGB')
                 if (image.size[0] % opts.legacy_img_size) != 0 or image.size[1] != opts.legacy_img_size:
-                    print('{} has invalid size ({})'.format(file, image.size))
-                    continue
+                    if image.size[0] > opts.legacy_img_size or image.size[1] > opts.legacy_img_size:
+                        print('{} has invalid size ({})'.format(file, image.size))
+                        continue
                 
-                image = image.crop((0, 0, opts.legacy_img_size, opts.legacy_img_size))
+                image = image.crop((0, 0, min(opts.legacy_img_size, image.size[0]), min(opts.legacy_img_size, image.size[1])))
                 diff = ImageChops.difference(image, back_img)
                 diff = ImageChops.add(diff, diff, 2.0, -20)
                 bbox = diff.getbbox()
