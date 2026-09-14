@@ -35,7 +35,6 @@ class AOCR(nn.Module):
             imgh=cfg.model.imgH, imgw=cfg.model.imgW,
             n_input_channels=1 if cfg.model.grayscale else 3,
             seq_len=cfg.model.max_len * (2 if cfg.train.loss.type == 'ctc' else 1),
-            proj_dropout=cfg.model.projection.dropout,
             **cfg.model.cct._asdict()
         )
         
