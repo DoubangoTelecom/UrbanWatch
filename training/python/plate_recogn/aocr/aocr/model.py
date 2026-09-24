@@ -2,6 +2,7 @@ import torch.nn as nn
 from aocr.cct.cct import CCT_AOCR
 from aocr.cct.utils.stn import StnAffine, StnTPS
 from aocr.cct.utils.fullyconnected import FullyConnected
+from aocr.cct.utils.activations import ACTIVATIONS
 from einops.layers.torch import Rearrange
 import torch.nn.functional as F
 
@@ -52,13 +53,19 @@ class AOCR(nn.Module):
         if cfg.model.projection.fc:
             self.projection = nn.Sequential(
                 nn.Dropout(cfg.model.projection.dropout),
-                FullyConnected(self.cct.tokenizer.projection.output_channels, self.alphabet_size)
+                FullyConnected(self.cct.tokenizer.projection.output_channels, cfg.model.projection.hidden_channels),
+                nn.BatchNorm1d(self.sequence_length_out) if cfg.model.projection.batch_norm else nn.Identity(),
+                ACTIVATIONS[cfg.model.projection.activation],
+                FullyConnected(cfg.model.projection.hidden_channels, self.alphabet_size),
             )
         else:
             self.projection = nn.Sequential(
                 Rearrange('b s c -> b c s ()'),
                 nn.Dropout2d(cfg.model.projection.dropout),
-                nn.Conv2d(self.cct.tokenizer.projection.output_channels, self.alphabet_size, 1),
+                nn.Conv2d(self.cct.tokenizer.projection.output_channels, cfg.model.projection.hidden_channels, 1),
+                nn.BatchNorm2d(cfg.model.projection.hidden_channels) if cfg.model.projection.batch_norm else nn.Identity(),
+                ACTIVATIONS[cfg.model.projection.activation],
+                nn.Conv2d(cfg.model.projection.hidden_channels, self.alphabet_size, 1),
                 Rearrange('b c s 1 -> b s (c 1)'),
             )
                 
@@ -84,7 +91,7 @@ class AOCR(nn.Module):
             if self.export_mode == 'stn':
                 return x
         x = self.cct(x)
-        x = self.projection(x)      
+        x = self.projection(x)
         if not self.is_training:
             x = F.softmax(x, dim=-1)
         

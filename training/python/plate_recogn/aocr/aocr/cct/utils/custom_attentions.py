@@ -195,7 +195,8 @@ class MultiHeadAttention(nn.Module):
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
-        x = torch.matmul(attn, v).permute(0, 2, 1, 3).reshape(B, N, C)
+        #x = torch.matmul(attn, v).permute(0, 2, 1, 3).reshape(B, N, C)
+        x = torch.matmul(attn, v).transpose(1, 2).contiguous().view(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x   

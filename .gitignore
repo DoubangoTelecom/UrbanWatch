@@ -1,0 +1,5 @@
+__pycache__
+aocr.egg-info
+log_train.txt
+log_dataset.txt
+opt.txt

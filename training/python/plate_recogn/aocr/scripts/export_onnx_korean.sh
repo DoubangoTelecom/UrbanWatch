@@ -1,1 +1,0 @@
-CUDA_VISIBLE_DEVICES=-1 python aocr/tools/export_onnx.py --config configs/config_korean.yml --weights saved_models/anpr_korean/best_norm_ED.pth

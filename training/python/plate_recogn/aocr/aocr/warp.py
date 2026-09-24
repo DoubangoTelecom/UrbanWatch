@@ -148,7 +148,8 @@ def get_minimum_dst_shape(
         dst_h = max(divisible, int((dst_h + divisible - 1) // divisible * divisible))
     return dst_w, dst_h
 
-def translate(img, translate, width, height):
+def translate(img, translate):
+    height, width = img.shape[:2]
     return cv2.copyMakeBorder(
         img,
         top=int(random.uniform(0, translate)*height),
@@ -221,7 +222,7 @@ class ShapeTransform:
         #M = T @ M
 
         img = self._perspective_warp(raw_img, M)
-        img = translate(img, self.translate_ratio, width, height)
+        img = translate(img, self.translate_ratio)
 
         return img
 

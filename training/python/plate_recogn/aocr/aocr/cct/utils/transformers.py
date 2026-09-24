@@ -82,7 +82,7 @@ class TransformerEncoderLayer(Module):
                  norm_type='dtanh', activation_type='relu'):
         super(TransformerEncoderLayer, self).__init__()
         self.pre_norm = DynamicTanh(d_model) if norm_type=='dtanh' else LayerNorm(d_model)
-        self.self_attn = Attention(dim=d_model, num_heads=nhead,
+        self.self_attn = MultiHeadAttention(dim=d_model, num_heads=nhead,
                                    attention_dropout=attention_dropout, projection_dropout=dropout) if nhead > 1 else SelfAttention(in_features=d_model, attention_dropout=attention_dropout, projection_dropout=dropout)
         self.linear1 = FullyConnected(d_model, dim_feedforward)
         self.dropout1 = Dropout(dropout)

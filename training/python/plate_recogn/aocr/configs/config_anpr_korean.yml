@@ -1,0 +1,107 @@
+model:
+  name: anpr_korean
+  max_len: 9 # maximum characters in a plate
+  alphabet: 주천충0강거경1호후리구6로루원제타하7가고자마조종두라러령허나남너모무므바2노육이인린머3버보부4저전누광5배교다산서세소8대더도북사9수아어기오외우울
+  imgH: 128 # image height
+  imgW: 128 # image width
+  grayscale: False # grayscale (1 channel) or RGB (3 channels)
+  stn_type: none # 'tps' or 'affine' or 'none'
+  stn_tps_num_points: 20
+  padding: False # whether to keep ratio then pad for image resize
+  normalize: [[123.675, 116.28, 103.53], [58.395, 57.12, 57.375]] # [mean, std]
+  projection:
+    fc: False # Fully Connected?
+    dropout: 0.1
+    hidden_channels: 1024
+    batch_norm: False
+    activation: LeakyReLU # ReLU, SiLU, LeakyReLU, GELU, SiLU, Identity
+  cct: # Compact Transformers
+    backbone:
+      type: resnet18 # vgg or mnv4 or resnet18
+      projection: 
+        fc: False # Fully Connected?
+        dropout: 0.1
+        hidden_channels: 1024
+        batch_norm: False
+        activation: LeakyReLU # ReLU, SiLU, LeakyReLU, GELU, SiLU, Identity
+      vgg:
+        channels: 256
+        activation: ReLU # ReLU, LeakyReLU, GELU, SiLU, Identity
+      resnet18:
+        width_mult: 1.0
+        out_stage: 3 # [1,4]
+        activation: ReLU # ReLU, SiLU, LeakyReLU, GELU, SiLU, Identity
+      mnv4: # MobileNetV4 backbone
+        block_size: large # small, medium, large
+        width_mult: 1.0
+        out_stage: 3 # [0,5]
+        activation: ReLU # ReLU, LeakyReLU, GELU, Identity
+    seq_pool: True
+    dropout: 0.0 # must be 0 for chinese, otherwise stuck when training from scratch
+    attention_dropout: 0.0 # must be 0 for chinese, otherwise stuck when training from scratch
+    stochastic_depth: 0.1
+    num_layers: 4 # 6
+    num_heads: 8 # multihead (>1) is not npu-friendly
+    mlp_ratio: 4.0
+    positional_embedding: learnable
+    norm_type: dtanh # 'dtanh' (Dynamic Tanh) or 'layer' (layer Norm)
+    activation_type: ReLU # ReLU, LeakyReLU, GELU, SiLU, Identity
+
+train:
+  dataset: /home/projects/urban-watch/plate_recogn/aocr/datasets/korean/imgs_train # path to training dataset
+  batch_size: 600 # input batch size (650)
+  workers: 16 # number of data loading workers
+  num_iter: 3000000 # number of iterations to train for
+  grad_clip: 5.0 # gradient clipping value, set to <=0 to disable
+  loss:
+    type: ce # ctc  or ce
+    alpha: 0.25 # 0.25
+    gamma: 2.0 # 2.0
+    label_smoothing: 0.0 # must be 0 when training from scratch
+    blank: 0
+  lr_scheduler:
+    patience: 2000
+    step_size: 1
+    gamma: 5.0e-1
+  optimizer: 
+    name: adam # adadelta or adam or sgd
+    adadelta:
+      lr: 1.0e-0
+      rho: 0.95 # decay rate rho for Adadelta
+      eps: 1.0e-8
+    adam:
+      lr: 1.0e-3
+      beta1: 0.9
+    sgd:
+      lr: 1.0e-3
+      momentum: 0.9
+      nesterov: True
+
+
+val:
+  dataset: /home/projects/urban-watch/plate_recogn/aocr/datasets/korean/imgs_val # path to validation dataset
+  interval: 10 # interval between each validation
+
+augment:
+  enabled: True
+  warp:
+    perspective: 0.25 # factor (must be within [0, 0.5], should be within [0, 0.25])
+    scale: [0.8, 1.2] # ratio, e.g. [0.6, 1.4]
+    stretch: [[0.8, 1.2], [0.8, 1.2]] # ratio, e.g. [0.6, 1.4]
+    rotation: 20.0 # degrees
+    shear: [5.0, 5.0] # degrees (x, y)
+    translate: 0.1 # ratio
+    flip: 0.0 # probability
+  texture:
+    gaussian_blur: [0.0, 2.0] # e.g. [0.0, 2.0]
+    multiply: [0.5, 1.2] # [0.5, 1.2]
+    multiply_hue: [0.5, 1.2] # [0.5, 1.2]
+    multiply_saturation: [0.5, 1.2] # [0.5, 1.2]
+    gamma_contrast: [0.5, 2.0] # [0.5, 2.0]
+    additive_gaussian_noise: 5.0 # 5.0
+    gray: [0.0, 1.0] # alpha
+    temperaure: [1100, 10000] # kelvin
+    salt: 0.02 # 0.02
+    pepper: 0.02 # 0.02
+
+manualSeed: 1111 # for random seed setting

@@ -6,19 +6,35 @@ from .mobilenetv4 import MobileNetV4
 from .resnet18 import ResNet18
 from .blurpool import BlurPool
 from .activations import ACTIVATIONS
+from .fullyconnected import FullyConnected
 from einops.layers.torch import Rearrange
 
 class Projection(nn.Module):
-    def __init__(self, out_shape, out_seq_len, dropout=0.1):
+    def __init__(self, out_shape, out_seq_len, proj_info):
         super(Projection, self).__init__()
         assert len(out_shape) == 4, 'Shape must be 4D'
         self.sequence_length_in = (out_shape[-1] * out_shape[-2])
-        self.net = nn.Sequential(
-            Rearrange('b c h w -> b (h w) c ()'),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(self.sequence_length_in, out_seq_len, 1),
-            Rearrange('b s c 1 -> b s (c 1)')
-        )
+        if proj_info.fc:
+            self.net = nn.Sequential(
+                nn.Dropout2d(proj_info.dropout),
+                Rearrange('b c h w -> b c (h w)'),
+                FullyConnected(self.sequence_length_in, proj_info.hidden_channels, bias=False),
+                nn.BatchNorm1d(out_shape[1]) if proj_info.batch_norm else nn.Identity(),
+                ACTIVATIONS[proj_info.activation],
+                FullyConnected(proj_info.hidden_channels, out_seq_len, bias=False),
+                Rearrange('b c s -> b s c')
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.Dropout2d(proj_info.dropout),
+                Rearrange('b c h w -> b (h w) c ()'),
+                nn.Conv2d(self.sequence_length_in, proj_info.hidden_channels, 1),
+                nn.BatchNorm2d(proj_info.hidden_channels) if proj_info.batch_norm else nn.Identity(),
+                ACTIVATIONS[proj_info.activation],
+                nn.Conv2d(proj_info.hidden_channels, out_seq_len, 1),
+                Rearrange('b s c 1 -> b s (c 1)')
+            )
+        
         net_shape = self.net(torch.zeros(out_shape)).shape
         self.sequence_length_out = net_shape[-2]
         self.output_channels = net_shape[-1]
@@ -30,19 +46,16 @@ class MNV4Tokenizer(nn.Module):
                  imgH, imgW,
                  input_channels,
                  seq_len,
-                 proj_dropout=0.1,
-                 block_size='medium',
-                 width_mult=1.0,
-                 out_stage=3,
-                 activation_type='ReLU'):
+                 backbone_info,
+                 proj_info):
         super(MNV4Tokenizer, self).__init__()
 
         # MobileNetV4 backbone
-        self.conv_layers = MobileNetV4(input_channels, block_size=block_size, width_mult=width_mult, out_stage=out_stage, activation=activation_type)
+        self.conv_layers = MobileNetV4(input_channels, block_size=backbone_info.block_size, width_mult=backbone_info.width_mult, out_stage=backbone_info.out_stage, activation=backbone_info.activation)
         self.projection = Projection(
             self.conv_layers(torch.zeros((1, input_channels, imgH, imgW))).shape, 
             seq_len,
-            proj_dropout
+            proj_info
         )
 
     def forward(self, x):
@@ -53,17 +66,15 @@ class ResNet18Tokenizer(nn.Module):
                  imgH, imgW,
                  input_channels,
                  seq_len,
-                 proj_dropout=0.1,
-                 width_mult=1.0,
-                 out_stage=3,
-                 activation_type='ReLU'):
+                 backbone_info,
+                 proj_info):
         super(ResNet18Tokenizer, self).__init__()
 
-        self.conv_layers = ResNet18(input_channels, width_mult=width_mult, out_stage=out_stage, activation=activation_type)
+        self.conv_layers = ResNet18(input_channels, width_mult=backbone_info.width_mult, out_stage=backbone_info.out_stage, activation=backbone_info.activation)
         self.projection = Projection(
             self.conv_layers(torch.zeros((1, input_channels, imgH, imgW))).shape, 
             seq_len,
-            proj_dropout
+            proj_info
         )
 
     def forward(self, x):
@@ -74,15 +85,14 @@ class VGGTokenizer(nn.Module):
                  imgH, imgW,
                  input_channels,
                  seq_len,
-                 proj_dropout=0.1,
-                 output_channel=256,
-                 activation_type='ReLU'):
+                 backbone_info,
+                 proj_info):
         super(VGGTokenizer, self).__init__()
 
-        self.output_channel = [int(output_channel / 8), int(output_channel / 4),
-                               int(output_channel / 2), output_channel]  # [64, 128, 256, 512]
+        self.output_channel = [int(backbone_info.channels / 8), int(backbone_info.channels / 4),
+                               int(backbone_info.channels / 2), backbone_info.channels]  # [64, 128, 256, 512]
 
-        activation_fn = lambda: ACTIVATIONS[activation_type]
+        activation_fn = lambda: ACTIVATIONS[backbone_info.activation]
         self.conv_layers = nn.Sequential(
             nn.Conv2d(input_channels, self.output_channel[0], 3, 1, 1),
             nn.BatchNorm2d(self.output_channel[0]),
@@ -104,13 +114,11 @@ class VGGTokenizer(nn.Module):
             nn.Conv2d(self.output_channel[2], self.output_channel[3], 3, 1, 1),
             nn.BatchNorm2d(self.output_channel[3]),
             activation_fn(),
-
-            Rearrange('b c h w -> b (h w) c'),
         )
         self.projection = Projection(
             self.conv_layers(torch.zeros((1, input_channels, imgH, imgW))).shape, 
             seq_len,
-            proj_dropout
+            proj_info
         )
 
     def forward(self, x):

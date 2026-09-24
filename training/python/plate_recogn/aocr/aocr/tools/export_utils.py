@@ -18,7 +18,6 @@ def load_image_then_preprocess(path: str, cfg, channel_first :bool=True):
         img = img.convert('L')
     
     # Normalization
-    
     mean = np.array(cfg.model.normalize[0], dtype=float).reshape([1, 1, 3])
     std = np.array(cfg.model.normalize[1], dtype=float).reshape([1, 1, 3])
     img = ((np.array(img).astype(np.float32) - mean) / std).astype(np.float32)

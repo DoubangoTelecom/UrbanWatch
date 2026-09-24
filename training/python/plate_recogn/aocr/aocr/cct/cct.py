@@ -52,21 +52,16 @@ class CCT_AOCR(nn.Module):
                 imgh, imgw,
                 input_channels=n_input_channels,
                 seq_len=seq_len,
-                proj_dropout=backbone.proj_dropout,
-                block_size=backbone.mnv4.block_size,
-                width_mult=backbone.mnv4.width_mult,
-                out_stage=backbone.mnv4.out_stage,
-                activation_type=backbone.mnv4.activation
+                backbone_info=backbone.mnv4,
+                proj_info=backbone.projection
             )
         elif backbone.type == 'resnet18':
             self.tokenizer = ResNet18Tokenizer(
                             imgh, imgw,
                             input_channels=n_input_channels,
                             seq_len=seq_len,
-                            proj_dropout=backbone.proj_dropout,
-                            width_mult=backbone.resnet18.width_mult,
-                            out_stage=backbone.resnet18.out_stage,
-                            activation_type=backbone.resnet18.activation
+                            backbone_info=backbone.resnet18,
+                            proj_info=backbone.projection
                         )
         else:
             assert backbone.type == 'vgg', f'Invalid backbone type: {backbone.type}'
@@ -74,9 +69,8 @@ class CCT_AOCR(nn.Module):
                 imgh, imgw,
                 input_channels=n_input_channels,
                 seq_len=seq_len,
-                proj_dropout=backbone.proj_dropout,
-                output_channel=backbone.vgg.channels,
-                activation_type=backbone.vgg.activation
+                backbone_info=backbone.vgg,
+                proj_info=backbone.projection
             )
         
         self.classifier = TransformerClassifier(
