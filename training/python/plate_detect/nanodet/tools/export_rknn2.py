@@ -11,7 +11,7 @@ def parse_args():
         description="Convert .pth or .ckpt model to rknn2 plus quantization.",
     )
     parser.add_argument("--cfg_path", type=str, required=True, help="Path to .yml config file.")
-    parser.add_argument("--target", type=str, required=True, help="Must be 'main_mobile' or 'pysearch'")
+    parser.add_argument("--target", type=str, required=True, help="Must be 'main_mobile' or 'main_desktop' or 'pysearch'")
     parser.add_argument(
         "--model_path", type=str, required=True, help="Path to .ckpt model."
     )
@@ -32,7 +32,7 @@ def parse_args():
     return parser.parse_args() 
            
 def main(cfg, args):
-    assert args.target in ['main_mobile', 'pysearch'], '--target value must be "main_mobile" or "pysearch"'
+    assert args.target in ['main_mobile', 'main_desktop', 'pysearch'], '--target value must be "main_mobile" or "main_desktop" or "pysearch"'
     logger = Logger(-1, cfg.save_dir, False)
     model = build_model(cfg.model).eval()
     checkpoint = torch.load(args.model_path, map_location=lambda storage, loc: storage, weights_only=False)

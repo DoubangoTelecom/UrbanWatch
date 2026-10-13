@@ -4,6 +4,6 @@ CUDA_VISIBLE_DEVICES=-1 python tools/export_rknn2.py \
     --per_channel True \
     --quantized_algorithm normal \
     --out_folder rknn2_models \
-    --calibration_dataset datasets/anpr_main/calibration/dataset.txt \
+    --calibration_dataset datasets/anpr_main/calibration_mobile/dataset.txt \
     --cfg_path config/anpr_mobile.yml \
     --model_path workspace/anpr_mobile/model_best/model_best.ckpt
