@@ -2,6 +2,7 @@ from typing import Any, Callable, List, Optional
 
 import torch
 from torch import nn, Tensor
+from .hsv import rgb_to_hsv
 
 __all__ = [
     "MobileNetV3",
@@ -221,9 +222,25 @@ class MobileNetV3(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, x: Tensor) -> Tensor:
-        if self.input_channels == 6:
-            r, g, b = x.unbind(1)
-            x = torch.stack([r - g, r - b, g - b, r, g, b], dim=1)
+        if self.input_channels > 3:
+            assert self.input_channels in [4, 6, 7, 2], f'Invalid number of channels'
+            if self.input_channels == 8:
+                r, g, b = x.unbind(1)
+                h, s, v = rgb_to_hsv(x).unbind(1)
+                x = torch.stack([h-s, h-v, s-v, h+s+v, r-g, r-b, g-b, r+g+b], dim=1)
+            elif self.input_channels == 7:
+                r, g, b = x.unbind(1)
+                x = torch.cat([torch.stack([r-g, r-b, g-b, r+g+b], dim=1), rgb_to_hsv(x)], dim=1)
+            elif self.input_channels == 6:
+                r, g, b = x.unbind(1)
+                x = torch.cat([torch.stack([r-g, r-b, g-b], dim=1), rgb_to_hsv(x)], dim=1)
+            elif self.input_channels == 4:
+                h, s, v = rgb_to_hsv(x).unbind(1)
+                x = torch.stack([h-s, h-v, s-v, h+s+v], dim=1)
+            elif self.input_channels == 2:
+                h, s, v = rgb_to_hsv(x).unbind(1)
+                x = torch.stack([h, s], dim=1)
+        
         return self.features(x)
 
 

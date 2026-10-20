@@ -1,0 +1,391 @@
+import os
+import sys
+import re
+import six
+import math
+import torch
+import random
+
+from natsort import natsorted
+from PIL import Image, ImageOps
+import numpy as np
+from torch.utils.data import Dataset, ConcatDataset, Subset
+import torchvision.transforms as transforms
+from aocr.warp import ShapeTransform
+
+class Batch_Balanced_Dataset(object):
+
+    def __init__(self, opt):
+        """
+        Modulate the data ratio in the batch.
+        For example, when select_data is "MJ-ST" and batch_ratio is "0.5-0.5",
+        the 50% of the batch is filled with MJ and the other 50% of the batch is filled with ST.
+        """
+        select_data = ['/']
+        batch_ratio = [1]
+        total_data_usage_ratio = 1.0
+        log = open(f'./saved_models/{opt.model.name}/log_dataset.txt', 'a')
+        dashed_line = '-' * 80
+        print(dashed_line)
+        log.write(dashed_line + '\n')
+        print(f'dataset_root: {opt.train.dataset}\nselect_data: {select_data}\nbatch_ratio: {batch_ratio}')
+        log.write(f'dataset_root: {opt.train.dataset}\nselect_data: {select_data}\nbatch_ratio: {batch_ratio}\n')
+        assert len(select_data) == len(batch_ratio)
+
+        _AlignCollate = AlignCollate(opt)
+        self.data_loader_list = []
+        self.dataloader_iter_list = []
+        batch_size_list = []
+        Total_batch_size = 0
+        batch_size = opt.train.batch_size * torch.cuda.device_count()
+        workers = opt.train.workers * torch.cuda.device_count()
+        for selected_d, batch_ratio_d in zip(select_data, batch_ratio):
+            _batch_size = max(round(batch_size * float(batch_ratio_d)), 1)
+            print(dashed_line)
+            log.write(dashed_line + '\n')
+            _dataset, _dataset_log = hierarchical_dataset(root=opt.train.dataset, opt=opt, select_data=[selected_d])
+            total_number_dataset = len(_dataset)
+            log.write(_dataset_log)
+
+            """
+            The total number of data can be modified with opt.total_data_usage_ratio.
+            ex) opt.total_data_usage_ratio = 1 indicates 100% usage, and 0.2 indicates 20% usage.
+            See 4.2 section in our paper.
+            """
+            number_dataset = int(total_number_dataset * float(total_data_usage_ratio))
+            dataset_split = [number_dataset, total_number_dataset - number_dataset]
+            indices = range(total_number_dataset)
+            _dataset, _ = [Subset(_dataset, indices[offset - length:offset])
+                           for offset, length in zip(Batch_Balanced_Dataset._accumulate(dataset_split), dataset_split)]
+            selected_d_log = f'num total samples of {selected_d}: {total_number_dataset} x {total_data_usage_ratio} (total_data_usage_ratio) = {len(_dataset)}\n'
+            selected_d_log += f'num samples of {selected_d} per batch: {batch_size} x {float(batch_ratio_d)} (batch_ratio) = {_batch_size}'
+            print(selected_d_log)
+            log.write(selected_d_log + '\n')
+            batch_size_list.append(str(_batch_size))
+            Total_batch_size += _batch_size
+
+            _data_loader = torch.utils.data.DataLoader(
+                _dataset, batch_size=_batch_size,
+                shuffle=True,
+                num_workers=int(workers),
+                collate_fn=_AlignCollate, pin_memory=True)
+            self.data_loader_list.append(_data_loader)
+            self.dataloader_iter_list.append(iter(_data_loader))
+
+        Total_batch_size_log = f'{dashed_line}\n'
+        batch_size_sum = '+'.join(batch_size_list)
+        Total_batch_size_log += f'Total_batch_size: {batch_size_sum} = {Total_batch_size}\n'
+        Total_batch_size_log += f'{dashed_line}'
+        batch_size = Total_batch_size
+
+        print(Total_batch_size_log)
+        log.write(Total_batch_size_log + '\n')
+        log.close()
+
+    def get_batch(self):
+        balanced_batch_images = []
+        balanced_batch_texts = []
+
+        for i, data_loader_iter in enumerate(self.dataloader_iter_list):
+            try:
+                image, text = next(data_loader_iter)
+            except StopIteration:
+                self.dataloader_iter_list[i] = iter(self.data_loader_list[i])
+                image, text = next(self.dataloader_iter_list[i])
+                
+            except ValueError:
+                pass
+            
+            balanced_batch_images.append(image)
+            balanced_batch_texts += text
+
+        balanced_batch_images = torch.cat(balanced_batch_images, 0)
+
+        return balanced_batch_images, balanced_batch_texts
+    
+    @staticmethod
+    def _accumulate(iterable, fn=lambda x, y: x + y):
+        "Return running totals"
+        # _accumulate([1,2,3,4,5]) --> 1 3 6 10 15
+        # _accumulate([1,2,3,4,5], operator.mul) --> 1 2 6 24 120
+        it = iter(iterable)
+        try:
+            total = next(it)
+        except StopIteration:
+            return
+        yield total
+        for element in it:
+            total = fn(total, element)
+            yield total
+
+def hierarchical_dataset(root, opt, select_data='/'):
+    """ select_data='/' contains all sub-directory of root directory """
+    dataset_list = []
+    dataset_log = f'dataset_root:    {root}\t dataset: {select_data[0]}'
+    print(dataset_log)
+    dataset_log += '\n'
+    for dirpath, dirnames, filenames in os.walk(root+'/'):
+        if not dirnames:
+            select_flag = False
+            for selected_d in select_data:
+                if selected_d in dirpath:
+                    select_flag = True
+                    break
+
+            if select_flag:
+                # TODO(dmi): LMDB doesn't support muli-workers(hangs), replaced by Doubango dataset
+                dataset = DoubangoDataset(dirpath, opt)
+                #dataset = LmdbDataset(dirpath, opt)
+                sub_dataset_log = f'sub-directory:\t/{os.path.relpath(dirpath, root)}\t num samples: {len(dataset)}'
+                print(sub_dataset_log)
+                dataset_log += f'{sub_dataset_log}\n'
+                dataset_list.append(dataset)
+
+    concatenated_dataset = ConcatDataset(dataset_list)
+
+    return concatenated_dataset, dataset_log
+
+class TrainValDataSet(Dataset):
+    def __init__(self, root, opt):
+        self.root = root
+        self.opt = opt
+
+        # Geometric transformations
+        self.warp = ShapeTransform(
+            **opt.augment.warp._asdict(),
+        )
+
+    def _augment(self, img):
+
+        # Geometry (1st try)
+        warp_now = random.choice([True, False])
+        if warp_now:
+            img = self.warp(img)
+        
+        # Texture
+        if random.randint(0, 2) == 0:
+            from imgaug import augmenters as iaa        
+            sequence = []
+            activate_fn = lambda: random.randint(0, 2) == 0 # pick 1/4 only, otherwise tooo slow
+            if activate_fn():
+                sequence.append(iaa.GaussianBlur(sigma=tuple(self.opt.augment.texture.gaussian_blur)))
+            if activate_fn():
+                sequence.append(iaa.Multiply(mul=tuple(self.opt.augment.texture.multiply), per_channel=random.choice([False, True])))
+            if activate_fn():
+                sequence.append(iaa.MultiplyHue(mul=tuple(self.opt.augment.texture.multiply_hue)))
+            if activate_fn():
+                sequence.append(iaa.MultiplySaturation(mul=tuple(self.opt.augment.texture.multiply_saturation)))
+            if activate_fn():
+                sequence.append(iaa.GammaContrast(gamma=tuple(self.opt.augment.texture.gamma_contrast), per_channel=random.choice([False, True])))
+            if activate_fn():
+                sequence.append(iaa.AdditiveGaussianNoise(scale=self.opt.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, True])))
+            if activate_fn():
+                sequence.append(iaa.Grayscale(alpha=tuple(self.opt.augment.texture.gray)))
+            if activate_fn():
+                sequence.append(iaa.ChangeColorTemperature(kelvin=tuple(self.opt.augment.texture.temperaure)))
+
+            # Apply transformation
+            if len(sequence) > 0:
+                transforms = iaa.Sequential(sequence, random_order=True)
+                img = transforms(images=[img])[0]
+
+        # Randomly inverse
+        if random.randint(0, 5) == 0:
+            img = 255 - img
+
+        # Geometry (2nd try)
+        if not warp_now:
+            img = self.warp(img)
+
+        return img
+    
+    def _post_process(self, img, label):
+        # We only train and evaluate on alphanumerics (or pre-defined character set in train.py)
+        out_of_char = f'[^{self.opt.model.alphabet}]'
+        label = re.sub(out_of_char, '', label)[:self.opt.model.max_len]
+
+        if self.opt.augment.enabled:
+            img = Image.fromarray(self._augment(np.array(img)), 'RGB')
+            
+        if self.opt.model.grayscale:
+            img = img.convert('L')
+
+        return (img, label)
+
+class DoubangoDataset(TrainValDataSet):
+    def __init__(self, root, opt):
+        super().__init__(root, opt)
+
+        # read gt
+        with open(os.path.join(self.root, "texts.txt"), "r") as f:
+            self.texts = f.read().splitlines()
+            print(f'[{self.root}] Number of gt: {len(self.texts)}')
+        
+        # read images list
+        with open(os.path.join(self.root, "imgs.txt"), "r") as f:
+            self.imgs = f.read().splitlines()
+            print(f'[{self.root}] Number of imgs: {len(self.imgs)}')
+
+        assert len(self.texts) == len(self.imgs), f'Number of images({len(self.imgs)}) different than number of gt({len(self.texts)})'
+
+    def __len__(self):
+        return len(self.imgs)
+    
+    def __getitem__(self, index, **kwargs):
+        name = self.imgs[index % len(self.imgs)]
+        label = self.texts[index % len(self.texts)]
+
+        img = Image.open(os.path.join(self.root, name)).convert('RGB')
+
+        return self._post_process(img, label)
+
+class LmdbDataset(TrainValDataSet):
+    
+    def __init__(self, root, opt):
+        super().__init__(root, opt)
+        import lmdb
+        self.root = root
+        
+        self.env = lmdb.open(root, max_readers=32, readonly=True, lock=False, readahead=False, meminit=False)
+        if not self.env:
+            print('cannot create lmdb from %s' % (root))
+            sys.exit(0)
+
+        with self.env.begin(write=False) as txn:
+            nSamples = int(txn.get('num-samples'.encode()))
+            self.nSamples = nSamples
+            self.filtered_index_list = [index + 1 for index in range(self.nSamples)]
+
+    def __len__(self):
+        return self.nSamples
+
+    def __getitem__(self, index):
+        assert index <= len(self), 'index range error'
+        index = self.filtered_index_list[index]
+
+        with self.env.begin(write=False) as txn:
+            label_key = 'label-%09d'.encode() % index
+            label = txn.get(label_key).decode('utf-8')
+            img_key = 'image-%09d'.encode() % index
+            imgbuf = txn.get(img_key)
+
+        buf = six.BytesIO()
+        buf.write(imgbuf)
+        buf.seek(0)
+        try:
+            img = Image.open(buf).convert('RGB')
+
+        except IOError:
+            print(f'Corrupted image for {index}')
+            # make dummy image and dummy label for corrupted image.
+            img = Image.new('RGB', (self.opt.model.imgW, self.opt.model.imgH))
+            label = '[dummy_label]'
+
+        return self._post_process(img, label)
+    
+class RawDataset(Dataset):
+
+    def __init__(self, root, opt):
+        self.opt = opt
+        self.image_path_list = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            for name in filenames:
+                _, ext = os.path.splitext(name)
+                ext = ext.lower()
+                if ext == '.jpg' or ext == '.jpeg' or ext == '.png':
+                    self.image_path_list.append(os.path.join(dirpath, name))
+
+        self.image_path_list = natsorted(self.image_path_list)
+        self.nSamples = len(self.image_path_list)
+
+    def __len__(self):
+        return self.nSamples
+
+    def __getitem__(self, index):
+        try:
+            if self.opt.model.grayscale:
+                img = Image.open(self.image_path_list[index]).convert('L')
+            else:
+                img = Image.open(self.image_path_list[index]).convert('RGB')
+
+        except IOError:
+            print(f'Corrupted image for {index}')
+            # make dummy image and dummy label for corrupted image.
+            if self.opt.model.grayscale:
+                img = Image.new('L', (self.opt.model.imgW, self.opt.model.imgH))
+            else:
+                img = Image.new('RGB', (self.opt.model.imgW, self.opt.model.imgH))
+
+        return (img, self.image_path_list[index])
+
+
+class ResizeNormalize(object):
+
+    def __init__(self, opt, interpolation=Image.BILINEAR):
+        self.padding = opt.model.padding
+        self.target_size = (opt.model.imgW, opt.model.imgH)
+        self.mean = torch.from_numpy(np.array(opt.model.normalize[0], dtype=np.float32).reshape(3, 1, 1) / 255.0)
+        self.std_inv = 1.0 / torch.from_numpy(np.array(opt.model.normalize[1], dtype=np.float32).reshape(3, 1, 1) / 255.0)
+        self.interpolation = interpolation
+        self.toTensor = transforms.ToTensor()
+
+    def __call__(self, image: Image):
+        if self.padding:
+            tmp = ImageOps.contain(image, self.target_size, self.interpolation)
+            img = Image.new(tmp.mode, self.target_size, 0)
+            img.paste(tmp, (0, 0))
+        else:
+            img = image.resize(self.target_size, self.interpolation)
+        # next code same as ((x - 127.5) / 127.5)
+        img = self.toTensor(img) # [0-255] -> [0-1]
+        img.sub_(self.mean).mul_(self.std_inv)
+        return img
+
+
+class NormalizePAD(object):
+
+    def __init__(self, max_size, PAD_type='right'):
+        self.toTensor = transforms.ToTensor()
+        self.max_size = max_size
+        self.max_width_half = math.floor(max_size[2] / 2)
+        self.PAD_type = PAD_type
+
+    def __call__(self, img):
+        img = self.toTensor(img)
+        img.sub_(0.5).div_(0.5)
+        c, h, w = img.size()
+        Pad_img = torch.FloatTensor(*self.max_size).fill_(0)
+        Pad_img[:, :, :w] = img  # right pad
+        if self.max_size[2] != w:  # add border Pad
+            Pad_img[:, :, w:] = img[:, :, w - 1].unsqueeze(2).expand(c, h, self.max_size[2] - w)
+
+        return Pad_img
+
+
+class AlignCollate(object):
+
+    def __init__(self, opt):
+        self.opt = opt
+        self.transform = ResizeNormalize(self.opt)
+
+    def __call__(self, batch):
+        batch = filter(lambda x: x is not None, batch)
+        images, labels = zip(*batch)
+            
+        image_tensors = [self.transform(image) for image in images]
+        image_tensors = torch.cat([t.unsqueeze(0) for t in image_tensors], 0)
+
+        return image_tensors, labels
+
+
+def tensor2im(image_tensor, imtype=np.uint8):
+    image_numpy = image_tensor.cpu().float().numpy()
+    if image_numpy.shape[0] == 1:
+        image_numpy = np.tile(image_numpy, (3, 1, 1))
+    image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + 1) / 2.0 * 255.0
+    return image_numpy.astype(imtype)
+
+
+def save_image(image_numpy, image_path):
+    image_pil = Image.fromarray(image_numpy)
+    image_pil.save(image_path)

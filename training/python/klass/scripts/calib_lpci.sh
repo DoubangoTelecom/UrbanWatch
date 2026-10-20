@@ -1,1 +1,1 @@
-python tools/calib_build.py --num_images 30000 --kar --image_size 128 --in_folder datasets/lpci --out_folder datasets/lpci/calibration
+python tools/calib_build.py --num_images 30000 --no-kar --image_size 128 --in_folder datasets/lpci --out_folder datasets/lpci/calibration

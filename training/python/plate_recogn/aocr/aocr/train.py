@@ -29,8 +29,7 @@ def train(cfg):
     # validation dataset
     log = open(f'./saved_models/{cfg.model.name}/log_dataset.txt', 'a')
     AlignCollate_valid = AlignCollate(cfg)
-    cfg_val = copy.deepcopy(cfg)
-    cfg_val.augment._replace(enabled=False) # no augmentation for validation
+    cfg_val = cfg._replace(augment=cfg.augment._replace(enabled=False)) # no augmentation for validation
     valid_dataset, valid_dataset_log = hierarchical_dataset(root=cfg_val.val.dataset, opt=cfg_val)
     valid_loader = torch.utils.data.DataLoader(
         valid_dataset, batch_size=(cfg_val.train.batch_size*torch.cuda.device_count()),

@@ -19,16 +19,13 @@ def preprocess_image(image :Image, cfg) -> np.ndarray:
         img.paste(tmp, (0, 0))
     else:
         img = image.resize((cfg.model.imgW, cfg.model.imgH), Image.BILINEAR)
-    
-    # Pillow -> Numpy
-    img = np.array(img)
-    
-    # Normalize
-    mean_std = cfg.model.normalize
-    assert(len(mean_std) == 2)
-    mean = mean_std[0] / 255.0
-    std = mean_std[1] / 255.0
-    return ((img.astype(np.float32)/255.0 - mean) / std).astype(np.float32)
+
+    # Normalization
+    mean = np.array(cfg.model.normalize[0], dtype=float).reshape([1, 1, 3])
+    std = np.array(cfg.model.normalize[1], dtype=float).reshape([1, 1, 3])
+    img = ((np.array(img).astype(np.float32) - mean) / std).astype(np.float32)
+
+    return img
 
 def load_image_then_preprocess(path: str, cfg, channel_first :bool=True):
     img = Image.open(path).convert(

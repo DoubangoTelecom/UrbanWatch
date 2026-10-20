@@ -9,7 +9,7 @@ def load_model(model, path, device):
     # Loading existing weights
     if os.path.isfile(path):
         print('Loading existing weigths:', path, ', device:', device)
-        model.load_state_dict(torch.load(path, map_location=device),strict=True)
+        model.load_state_dict(torch.load(path, map_location=device),strict=False)
     else:
         print('No weigths found for', path, ', device:', device)
     return model.to(device)
@@ -24,6 +24,7 @@ def train(cfg):
     os.makedirs(model_folder, exist_ok=True)
     model_path = os.path.join(model_folder, f'{cfg.model.name}.pth')
     model = KlassModel(cfg, training=True)
+    print(f"Backbone: {cfg.model.backbone.type}\nOutChannels: {model.backbone.output_channels}, HiddenChannels: {cfg.model.projection.hidden_channels},  NumClasses: {cfg.model.num_classes}")
     model = load_model(model, model_path, device)
     model = torch.nn.DataParallel(model)
         
@@ -35,8 +36,7 @@ def train(cfg):
         shuffle=True,
         num_workers=int(cfg.train.workers*device_count),
         pin_memory=True)
-    cfg_val = copy.deepcopy(cfg)
-    cfg_val.augment._replace(enabled=False) # no augmentation for validation
+    cfg_val = cfg._replace(augment=cfg.augment._replace(enabled=False)) # no augmentation for validation
     val_dataset = KlassDataset(cfg_val, 'val')
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=(batch_size*device_count),
@@ -88,10 +88,18 @@ def train(cfg):
         for batch_idx, (images_, labels_) in enumerate(train_loader):
             images, labels = [x.to(device) for x in [images_, labels_]]
             # inference
-            preds = model(images)
+            preds, feat_logits = model(images, labels)
 
-            # loss
-            cost = criterion(preds.view(-1, preds.shape[-1]), labels.contiguous().view(-1))
+            # loss (+L2-regul)
+            cost = torch.tensor(0.).to(preds.device)
+            for p in [preds, feat_logits]:
+                if not p is None:
+                    cost += criterion(p.view(-1, p.shape[-1]), labels.contiguous().view(-1))
+            if cfg.train.l2_lambda > 0:
+                l2_reg = torch.tensor(0.).to(cost.device)
+                for param in model.parameters():
+                    l2_reg += torch.norm(param)
+                cost += cfg.train.l2_lambda * l2_reg
             loss_avg.add(cost)
 
             # backprop
@@ -107,7 +115,7 @@ def train(cfg):
             total += labels.size(0)
 
             # print progress
-            print(f'[T#{epoch + 1:5d}/{cfg.train.epochs:5d}/{best_epoch+1:5d}, {batch_idx+1:5d}/{len(train_loader):5d}] loss: {loss_avg.val():.5f}, lr: {lr_scheduler.get_last_lr()[0]:.3e}, acc: {correct / total :.5f}, best_acc: {best_accuracy :.5f}', end='\r')
+            print(f'[T#{epoch + 1:5d}/{cfg.train.epochs:5d}/{best_epoch+1:5d}, {batch_idx+1:5d}/{len(train_loader):5d}] loss: {loss_avg.val():.5f}, lr: {lr_scheduler.get_last_lr()[0]:.3e}, newai:{num_epoch_without_accuracy_increase :2d}/{cfg.train.lr_scheduler.patience :2d}, acc: {correct / total :.5f}, best_acc: {best_accuracy :.5f}', end='\r')
             
         # End of train loop
         print("", flush=True)
@@ -120,15 +128,18 @@ def train(cfg):
             loss_avg.reset()
             for batch_idx, (images_, labels_) in enumerate(val_loader):
                 images, labels = [x.to(device) for x in [images_, labels_]]
-                preds = model(images)
-                cost = criterion(preds.view(-1, preds.shape[-1]), labels.contiguous().view(-1))
+                preds, feat_logits = model(images, labels)
+                cost = torch.tensor(0.).to(preds.device)
+                for p in [preds, feat_logits]:
+                    if not p is None:
+                        cost += criterion(p.view(-1, p.shape[-1]), labels.contiguous().view(-1))
                 loss_avg.add(cost)
                 
                 _,pred = torch.max(preds, dim=1)
                 correct += torch.sum(pred==labels).item()
                 total += labels.size(0)
             
-                print(f'[V@{epoch + 1:5d}/{cfg.train.epochs:5d}/{best_epoch+1:5d}, {batch_idx+1:5d}/{len(train_loader):5d}] loss: {loss_avg.val():.5f}, newai:{num_epoch_without_accuracy_increase :2d}, acc: {correct / total :0.5f}, best_acc: {best_accuracy :.5f}', end='\r')
+                print(f'[V@{epoch + 1:5d}/{cfg.train.epochs:5d}/{best_epoch+1:5d}, {batch_idx+1:5d}/{len(val_loader):5d}] loss: {loss_avg.val():.5f}, newai:{num_epoch_without_accuracy_increase :2d}/{cfg.train.lr_scheduler.patience :2d}, acc: {correct / total :0.5f}, best_acc: {best_accuracy :.5f}', end='\r')
         
             # End of val loop
             print("", flush=True)

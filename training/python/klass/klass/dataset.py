@@ -6,7 +6,7 @@ from .rgb2lxy import Rgb2LXY
 
 class KlassDataset(torch.utils.data.Dataset):
     def __init__(self, cfg, target):
-        assert target in ['train', 'val'], f'Target ({target}) must be train or val'
+        assert target in ['train', 'val', 'calib'], f'Target ({target}) must be train or val or calib'
         self.cfg = cfg
         self.target = target
         self.transform = ResizeNormalize(cfg)
@@ -21,7 +21,7 @@ class KlassDataset(torch.utils.data.Dataset):
             print(f'[{self.target}] Number of classes: {len(self.class_names)}')
         
         # read images list
-        self.images_folder = cfg.datasets.train if self.target == 'train' else cfg.datasets.val
+        self.images_folder = cfg.datasets._asdict()[self.target]
         with open(os.path.join(self.images_folder, "list.txt"), "r") as f:
             self.images_files = f.read().splitlines()
             print(f'[{self.target}] Number of files: {len(self.images_files)}')
@@ -52,25 +52,22 @@ class KlassDataset(torch.utils.data.Dataset):
         
     def _augment(self, img :np.ndarray):
         
-        # Geometry
-        img = self.warp(img)
-        
         # Texture
         from imgaug import augmenters as iaa        
         sequence = []
         activate_fn = lambda: random.randint(0, 3) == 0 # pick 1/3 only, otherwise tooo slow
-        if activate_fn():
+        if activate_fn() and self.cfg.augment.texture.gaussian_blur[0] > 0:
             sequence.append(iaa.GaussianBlur(sigma=tuple(self.cfg.augment.texture.gaussian_blur)))
-        if activate_fn():
-            sequence.append(iaa.Multiply(mul=tuple(self.cfg.augment.texture.multiply), per_channel=random.choice([False, True])))
-        if activate_fn():
+        if activate_fn() and self.cfg.augment.texture.multiply[0] > 0:
+            sequence.append(iaa.Multiply(mul=tuple(self.cfg.augment.texture.multiply), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if activate_fn() and self.cfg.augment.texture.multiply_hue[0] > 0:
             sequence.append(iaa.MultiplyHue(mul=tuple(self.cfg.augment.texture.multiply_hue)))
-        if activate_fn():
+        if activate_fn() and self.cfg.augment.texture.multiply_saturation[0] > 0:
             sequence.append(iaa.MultiplySaturation(mul=tuple(self.cfg.augment.texture.multiply_saturation)))
-        if activate_fn():
-            sequence.append(iaa.GammaContrast(gamma=tuple(self.cfg.augment.texture.gamma_contrast), per_channel=random.choice([False, True])))
-        if activate_fn():
-            sequence.append(iaa.AdditiveGaussianNoise(scale=self.cfg.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, True])))
+        if activate_fn() and self.cfg.augment.texture.gamma_contrast[0] > 0:
+            sequence.append(iaa.GammaContrast(gamma=tuple(self.cfg.augment.texture.gamma_contrast), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if activate_fn() and self.cfg.augment.texture.additive_gaussian_noise > 0:
+            sequence.append(iaa.AdditiveGaussianNoise(scale=self.cfg.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
         
         # Change to grayscale (probability)
         if random.random() < self.cfg.augment.texture.grayscale:
@@ -83,6 +80,9 @@ class KlassDataset(torch.utils.data.Dataset):
             transforms = iaa.Sequential(sequence, random_order=True)
             img = transforms(images=[img])[0]
 
+        # Geometry
+        img = self.warp(img)
+
         return img
         
 class ResizeNormalize(object):
@@ -90,8 +90,8 @@ class ResizeNormalize(object):
     def __init__(self, opt, interpolation=Image.BILINEAR):
         self.keep_aspect_ratio = opt.model.imgKar
         self.target_size = (opt.model.imgW, opt.model.imgH)
-        self.mean = float(opt.model.normalize[0] / 255.0)
-        self.std = float(opt.model.normalize[1] / 255.0)
+        self.mean = torch.from_numpy(np.array(opt.model.normalize[0], dtype=np.float32).reshape(3, 1, 1) / 255.0)
+        self.std_inv = 1.0 / torch.from_numpy(np.array(opt.model.normalize[1], dtype=np.float32).reshape(3, 1, 1) / 255.0)
         self.interpolation = interpolation
         self.toTensor = transforms.ToTensor()
 
@@ -104,5 +104,5 @@ class ResizeNormalize(object):
             img = image.resize(self.target_size, self.interpolation)
         # next code same as ((x - 127.5) / 127.5)
         img = self.toTensor(img) # [0-255] -> [0-1]
-        img.sub_(self.mean).div_(self.std)
+        img.sub_(self.mean).mul_(self.std_inv)
         return img

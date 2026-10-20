@@ -9,6 +9,8 @@ Modified by Mamadou DIOP (dmi) for integration with NanoDet
 import torch
 import torch.nn as nn
 import math
+from .activations import ACTIVATIONS
+from .hsv import rgb_to_hsv
 
 # INFO(dmi): Check https://ritvik19.medium.com/papers-explained-232-mobilenetv4-83a526887c30 about the blocks
 block_specs_small = [
@@ -132,12 +134,6 @@ block_specs_large = [
 class Linear(torch.nn.Module):
     def forward(self, output):
         return output
-    
-ACTIVATIONS = { 
-    'ReLU': nn.ReLU(inplace=True), 
-    'LeakyReLU': nn.LeakyReLU(negative_slope=0.1, inplace=True),
-    'Linear': Linear()
-}
 
 def make_divisible(value, divisor, min_value=None, round_down_protect=True):
     if min_value is None:
@@ -237,10 +233,11 @@ class MobileNetV4(nn.Module):
                  block_size="small",
                  width_mult=1.0,
                  out_stage=5,
-                 activation="ReLU",
+                 activation="ReLU"
             ):
         super(MobileNetV4, self).__init__()
         assert out_stage >= 0 and out_stage <= 5, 'OutStage must be within [0,5]'
+        self.input_channels = input_channels
         self.out_stage = out_stage
         self.width_mult = width_mult
         blocks = {
@@ -288,7 +285,7 @@ class MobileNetV4(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
-    def forward(self, x):
+    def forward(self, x):        
         for i in range(0, 6):
             stage = getattr(self, "stage{}".format(i))
             x = stage(x)
