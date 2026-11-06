@@ -80,21 +80,13 @@ def train(cfg):
     # loss averager
     loss_avg = Averager()
 
-    # filter that only require gradient decent
-    filtered_parameters = []
-    params_num = []
-    for p in filter(lambda p: p.requires_grad, model.parameters()):
-        filtered_parameters.append(p)
-        params_num.append(np.prod(p.size()))
-    print('Trainable params num : ', sum(params_num))
-
     # setup optimizer
     if cfg.train.optimizer.name == 'adam':
-        optimizer = optim.Adam(filtered_parameters, lr=cfg.train.optimizer.adam.lr, betas=(cfg.train.optimizer.adam.beta1, 0.999))
+        optimizer = optim.Adam(model.parameters(), lr=cfg.train.optimizer.adam.lr, betas=(cfg.train.optimizer.adam.beta1, 0.999))
     elif cfg.train.optimizer.name == 'sgd':
-        optimizer = optim.SGD(filtered_parameters, lr=cfg.train.optimizer.sgd.lr, momentum=cfg.train.optimizer.sgd.momentum, nesterov=cfg.train.optimizer.sgd.nesterov)
+        optimizer = optim.SGD(model.parameters(), lr=cfg.train.optimizer.sgd.lr, momentum=cfg.train.optimizer.sgd.momentum, nesterov=cfg.train.optimizer.sgd.nesterov)
     else:
-        optimizer = optim.Adadelta(filtered_parameters, lr=cfg.train.optimizer.adadelta.lr, rho=cfg.train.optimizer.adadelta.rho, eps=cfg.train.optimizer.adadelta.eps)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg.train.optimizer.adadelta.lr, rho=cfg.train.optimizer.adadelta.rho, eps=cfg.train.optimizer.adadelta.eps)
     print("Optimizer:", optimizer)
     
     # LR-Scheduler (https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html#steplr)
@@ -141,6 +133,10 @@ def train(cfg):
         image = image_tensors
         text, length = converter.encode(labels, batch_max_length=cfg.model.max_len)
 
+        # zero the parameter gradients
+        model.zero_grad(set_to_none=True)
+
+        # inference
         preds = model(image)
         
         if cfg.train.loss.type == 'ctc':
@@ -149,7 +145,7 @@ def train(cfg):
         else:
             cost = criterion(preds.view(-1, preds.shape[-1]), text.contiguous().view(-1))
 
-        model.zero_grad()
+        # backprop
         cost.backward()
         if cfg.train.grad_clip > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)  # gradient clipping with 5 (Default)

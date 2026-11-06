@@ -1,5 +1,6 @@
 import numpy as np, cv2, math, random, os
 from typing import Dict, Optional, Tuple
+from PIL import Image, ImageOps
 
 def get_flip_matrix(prob=0.5):
     F = np.eye(3)
@@ -176,6 +177,26 @@ def get_minimum_dst_shape(
         dst_h = max(divisible, int((dst_h + divisible - 1) // divisible * divisible))
     return dst_w, dst_h
 
+def translate(img, translate, border_reflect):
+    height, width = img.shape[:2]
+    return cv2.copyMakeBorder(
+        img,
+        top=int(random.uniform(0, translate)*height),
+        bottom=int(random.uniform(0, translate)*height),
+        left=int(random.uniform(0, translate)*width),
+        right=int(random.uniform(0, translate)*width),
+        borderType=cv2.BORDER_REFLECT if border_reflect else cv2.BORDER_CONSTANT,
+        value=(0, 0, 0)
+    )
+
+def crop(img, ratio):
+    height, width = img.shape[:2]
+    return img[
+        int(random.uniform(0, ratio)*height):height-int(random.uniform(0, ratio)*height),
+        int(random.uniform(0, ratio)*width):width-int(random.uniform(0, ratio)*width),
+        ...
+    ]
+
 class ShapeTransform:
     """Shape transforms including resize, random perspective, random scale,
     random stretch, random rotation, random shear, random translate,
@@ -200,6 +221,8 @@ class ShapeTransform:
         shear: float = (0, 0),
         translate: float = 0.0,
         flip: float = 0.0,
+        crop: float = 0.0,
+        border_reflect: bool = False,
         **kwargs
     ):
         self.perspective = perspective
@@ -209,6 +232,8 @@ class ShapeTransform:
         self.shear_degree = shear
         self.flip_prob = flip
         self.translate_ratio = translate
+        self.crop_ratio = crop
+        self.border_reflect = border_reflect
 
     def __call__(self, raw_img):
         height, width = raw_img.shape[:2]
@@ -234,10 +259,12 @@ class ShapeTransform:
         F = get_flip_matrix(self.flip_prob)
         M = F @ M
 
-        T = get_translate_matrix(self.translate_ratio, width, height)
-        M = T @ M
+        #T = get_translate_matrix(self.translate_ratio, width, height)
+        #M = T @ M
 
         img = self._perspective_warp(raw_img, M)
+        img = translate(img, self.translate_ratio, self.border_reflect)
+        img = crop(img, self.crop_ratio)
         return img
 
     # https://stackoverflow.com/a/59741739
@@ -264,15 +291,15 @@ def _augment(opt, img):
     if activate_fn():
         sequence.append(iaa.GaussianBlur(sigma=tuple(opt.gaussian_blur)))
     if activate_fn():
-        sequence.append(iaa.Multiply(mul=tuple(opt.multiply), per_channel=random.choice([False, False])))
+        sequence.append(iaa.Multiply(mul=tuple(opt.multiply), per_channel=random.choice([True, False])))
     if activate_fn():
         sequence.append(iaa.MultiplyHue(mul=tuple(opt.multiply_hue)))
     if activate_fn():
         sequence.append(iaa.MultiplySaturation(mul=tuple(opt.multiply_saturation)))
     if activate_fn():
-        sequence.append(iaa.GammaContrast(gamma=tuple(opt.gamma_contrast), per_channel=random.choice([False, False])))
+        sequence.append(iaa.GammaContrast(gamma=tuple(opt.gamma_contrast), per_channel=random.choice([True, False])))
     if activate_fn():
-        sequence.append(iaa.AdditiveGaussianNoise(scale=opt.additive_gaussian_noise, per_channel=random.choice([False, False])))
+        sequence.append(iaa.AdditiveGaussianNoise(scale=opt.additive_gaussian_noise, per_channel=random.choice([True, False])))
 
     # Apply transformation
     if len(sequence) > 0:
@@ -285,6 +312,16 @@ def _augment(opt, img):
 
     return img
 
+def resize(image:np.ndarray, target_size=(128,128), keep_aspect_ratio=False):
+    if keep_aspect_ratio:
+        tmp = ImageOps.contain(Image.fromarray(image, 'RGB'), target_size)
+        img = Image.new(tmp.mode, target_size, 0)
+        img.paste(tmp, (0, 0))
+    else:
+        img = Image.fromarray(image, 'RGB').resize(target_size)
+
+    return np.array(img)
+
 FOLDER_PATH = 'C:/Users/dmi83/Downloads/images'
 IMAGE_EXTs = ['tif','png','jpg','jpeg','bmp'] 
 list_images = lambda dir: np.array([os.path.join(dir, file) for file in os.listdir(dir) if file.split('.')[-1].lower() in IMAGE_EXTs or os.path.isdir(os.path.join(dir, file))])
@@ -293,19 +330,20 @@ if __name__ == '__main__':
     images = list_images(FOLDER_PATH)
     assert len(images) > 0, 'Folder is empty'
     transform = ShapeTransform(
-        perspective=0.50,
-        scale=(0.5, 2.0),
-        stretch=((0.5, 2.0), (0.5, 2.0)),
-        rotation=30.0,
-        shear=(0.0, 0.0),
-        translate=0.0,
-        flip=0.5
+        perspective=0.25,
+        scale=(0.8, 1.2),
+        stretch=((0.8, 1.2), (0.8, 1.2)),
+        rotation=20.0,
+        shear=(10.0, 10.0),
+        translate=0.2,
+        flip=0.0,
+        crop=0.2
     )
     opt = type('obj', (object,), {
         'gaussian_blur': [0.0, 2.0],
-        'multiply': [0.5, 2.0],
-        'multiply_hue': [1.0, 1.0],
-        'multiply_saturation': [2.0, 2.0],
+        'multiply': [0.5, 1.2],
+        'multiply_hue': [0.5, 1.2],
+        'multiply_saturation': [0.5, 1.2],
         'gamma_contrast': [0.5, 2.0],
         'additive_gaussian_noise': 5.0,
         'salt': 0.02,
@@ -317,7 +355,7 @@ if __name__ == '__main__':
         image_orig = cv2.imread(path, cv2.IMREAD_COLOR_RGB)
         image_trans = transform(_augment(opt, image_orig))
         cv2.imshow(os.path.basename(path), 
-            cv2.cvtColor(np.concatenate((cv2.resize(image_orig, (128, 128)), cv2.resize(image_trans, (128, 128))), axis=1), cv2.COLOR_RGB2BGR)
+            cv2.cvtColor(np.concatenate((resize(image_orig, (128, 128)), resize(image_trans, (128, 128))), axis=1), cv2.COLOR_RGB2BGR)
         )
         cv2.waitKey(0)
         cv2.destroyWindow(os.path.basename(path))

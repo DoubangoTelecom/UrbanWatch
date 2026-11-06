@@ -6,9 +6,8 @@ class Averager(object):
 
     def add(self, v):
         count = v.data.numel()
-        v = v.data.sum()
         self.n_count += count
-        self.sum += v
+        self.sum += v.data.sum()
 
     def reset(self):
         self.n_count = 0

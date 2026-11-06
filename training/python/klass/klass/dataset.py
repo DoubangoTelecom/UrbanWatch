@@ -22,7 +22,8 @@ class KlassDataset(torch.utils.data.Dataset):
         
         # read images list
         self.images_folder = cfg.datasets._asdict()[self.target]
-        with open(os.path.join(self.images_folder, "list.txt"), "r") as f:
+        list_file_name = "dataset.txt" if (target == 'calib' and os.path.exists(os.path.join(self.images_folder, "dataset.txt"))) else "list.txt"
+        with open(os.path.join(self.images_folder, list_file_name), "r") as f:
             self.images_files = f.read().splitlines()
             print(f'[{self.target}] Number of files: {len(self.images_files)}')
             
@@ -51,23 +52,43 @@ class KlassDataset(torch.utils.data.Dataset):
         return self.transform(self.to_pillow(image)), torch.tensor(label_id)
         
     def _augment(self, img :np.ndarray):
-        
+
+        # Geometry
+        img = self.warp(img)
+
         # Texture
-        from imgaug import augmenters as iaa        
+        from imgaug import augmenters as iaa
         sequence = []
-        activate_fn = lambda: random.randint(0, 3) == 0 # pick 1/3 only, otherwise tooo slow
-        if activate_fn() and self.cfg.augment.texture.gaussian_blur[0] > 0:
+        is_active_fn = lambda: (random.randint(0, 1) == 0) # pick 1/2 only, otherwise tooo slow
+        is_enabled = lambda x: (getattr(self.cfg.augment.texture, x)[0] > 0 if isinstance(getattr(self.cfg.augment.texture, x), (list, tuple)) else getattr(self.cfg.augment.texture, x))
+        if is_active_fn() and is_enabled('average_blur'):
+            sequence.append(iaa.AverageBlur(k=tuple(self.cfg.augment.texture.average_blur)))  
+        if is_active_fn() and is_enabled('gaussian_blur'):
             sequence.append(iaa.GaussianBlur(sigma=tuple(self.cfg.augment.texture.gaussian_blur)))
-        if activate_fn() and self.cfg.augment.texture.multiply[0] > 0:
+        if is_active_fn() and is_enabled('motion_blur'):
+            sequence.append(iaa.MotionBlur(k=self.cfg.augment.texture.motion_blur[0], angle=self.cfg.augment.texture.motion_blur[1:]))
+        if is_active_fn() and is_enabled('multiply'):
             sequence.append(iaa.Multiply(mul=tuple(self.cfg.augment.texture.multiply), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
-        if activate_fn() and self.cfg.augment.texture.multiply_hue[0] > 0:
+        if is_active_fn() and is_enabled('multiply_hue'):
             sequence.append(iaa.MultiplyHue(mul=tuple(self.cfg.augment.texture.multiply_hue)))
-        if activate_fn() and self.cfg.augment.texture.multiply_saturation[0] > 0:
+        if is_active_fn() and is_enabled('multiply_saturation'):
             sequence.append(iaa.MultiplySaturation(mul=tuple(self.cfg.augment.texture.multiply_saturation)))
-        if activate_fn() and self.cfg.augment.texture.gamma_contrast[0] > 0:
+        if is_active_fn() and is_enabled('gamma_contrast'):
             sequence.append(iaa.GammaContrast(gamma=tuple(self.cfg.augment.texture.gamma_contrast), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
-        if activate_fn() and self.cfg.augment.texture.additive_gaussian_noise > 0:
+        if is_active_fn() and is_enabled('sigmoid_contrast'):
+            sequence.append(iaa.SigmoidContrast(gain=tuple(self.cfg.augment.texture.sigmoid_contrast[:2]), cutoff=tuple(self.cfg.augment.texture.sigmoid_contrast[2:]), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if is_active_fn() and is_enabled('log_contrast'):
+            sequence.append(iaa.LogContrast(gain=tuple(self.cfg.augment.texture.log_contrast), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if is_active_fn() and is_enabled('linear_contrast'):
+            sequence.append(iaa.LinearContrast(alpha=tuple(self.cfg.augment.texture.linear_contrast), per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if is_active_fn() and is_enabled('emboss'):
+            sequence.append(iaa.Emboss(alpha=tuple(self.cfg.augment.texture.emboss[:2]), strength=tuple(self.cfg.augment.texture.emboss[2:])))
+        if is_active_fn() and is_enabled('additive_gaussian_noise'):
             sequence.append(iaa.AdditiveGaussianNoise(scale=self.cfg.augment.texture.additive_gaussian_noise, per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if is_active_fn() and is_enabled('salt'):
+            sequence.append(iaa.Salt(p=self.cfg.augment.texture.salt, per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
+        if is_active_fn() and is_enabled('pepper'):
+            sequence.append(iaa.Pepper(p=self.cfg.augment.texture.pepper, per_channel=random.choice([False, self.cfg.augment.texture.per_channel])))
         
         # Change to grayscale (probability)
         if random.random() < self.cfg.augment.texture.grayscale:
@@ -79,9 +100,6 @@ class KlassDataset(torch.utils.data.Dataset):
         if len(sequence) > 0:
             transforms = iaa.Sequential(sequence, random_order=True)
             img = transforms(images=[img])[0]
-
-        # Geometry
-        img = self.warp(img)
 
         return img
         

@@ -148,7 +148,7 @@ def get_minimum_dst_shape(
         dst_h = max(divisible, int((dst_h + divisible - 1) // divisible * divisible))
     return dst_w, dst_h
 
-def translate(img, translate, random_border_color):
+def translate(img, translate, border_reflect):
     height, width = img.shape[:2]
     return cv2.copyMakeBorder(
         img,
@@ -156,8 +156,8 @@ def translate(img, translate, random_border_color):
         bottom=int(random.uniform(0, translate)*height),
         left=int(random.uniform(0, translate)*width),
         right=int(random.uniform(0, translate)*width),
-        borderType=cv2.BORDER_CONSTANT if random_border_color else cv2.BORDER_REFLECT,
-        value=[random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)] if random_border_color else (0, 0, 0)
+        borderType=cv2.BORDER_REFLECT if border_reflect else cv2.BORDER_CONSTANT,
+        value=(0, 0, 0)
     )
 
 def crop(img, ratio):
@@ -193,7 +193,7 @@ class ShapeTransform:
         translate: float = 0.0,
         flip: float = 0.0,
         crop: float = 0.0,
-        random_border_color: bool = True,
+        border_reflect: bool = False,
         **kwargs
     ):
         self.perspective = perspective
@@ -204,7 +204,7 @@ class ShapeTransform:
         self.flip_prob = flip
         self.translate_ratio = translate
         self.crop_ratio = crop
-        self.random_border_color = random_border_color
+        self.border_reflect = border_reflect
 
     def __call__(self, raw_img):
         height, width = raw_img.shape[:2]
@@ -234,7 +234,7 @@ class ShapeTransform:
         #M = T @ M
 
         img = self._perspective_warp(raw_img, M)
-        img = translate(img, self.translate_ratio, self.random_border_color)
+        img = translate(img, self.translate_ratio, self.border_reflect)
         img = crop(img, self.crop_ratio)
 
         return img
@@ -256,8 +256,8 @@ class ShapeTransform:
             image, 
             corrected_transform, 
             (math.ceil(xmax - xmin), math.ceil(ymax - ymin)), 
-            borderValue=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) if self.random_border_color else (0, 0, 0), 
-            borderMode=cv2.BORDER_CONSTANT  if self.random_border_color else cv2.BORDER_REFLECT,
+            borderValue=(0, 0, 0), 
+            borderMode=cv2.BORDER_REFLECT  if self.border_reflect else cv2.BORDER_CONSTANT,
             flags=random.choice([cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, cv2.INTER_LANCZOS4])
         )
 

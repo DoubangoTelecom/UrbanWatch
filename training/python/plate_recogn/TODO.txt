@@ -1,0 +1,7 @@
+- Use same texture augmentation as lpci/nanodet class
+- Use same focal loss as klass
+- Use getattr() for optim as klass
+- Use getattr() for backend inst
+- Use exp decay as klass
+- Compute validation score per epoch
+- Try with MobileVit v3 backend

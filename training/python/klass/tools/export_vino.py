@@ -47,7 +47,7 @@ def main(cfg, opt):
     
     # Dataset
     cfg_calib = cfg._replace(augment=cfg.augment._replace(enabled=False)) # no augmentation for calibration
-    calib_dataset = KlassDataset(cfg_calib, 'calib') # requires 'list.txt' -> 'cp calibration/dataset.txt calibration/list.txt'
+    calib_dataset = KlassDataset(cfg_calib, 'calib')
     calib_loader = torch.utils.data.DataLoader(
         calib_dataset, batch_size=1,
         shuffle=False,

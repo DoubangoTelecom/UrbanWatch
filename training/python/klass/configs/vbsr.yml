@@ -1,25 +1,26 @@
 model:
   name: vbsr
   num_classes: 12
-  imgH: 224
-  imgW: 224
+  imgH: 144
+  imgW: 144
   imgKar: True # Keep Aspect Ratio
   chroma: rgb # lxy, rgb, gray...
   normalize: [[127.5, 127.5, 127.5], [127.5, 127.5, 127.5]] # [mean, std]
   feat_separator: 
-    enabled: True
+    enabled: False
     margin: 0.25
     scale: 30.0
+    dropout: 0.2
   projection:
     fully_connected: False
-    hidden_channels: 1280
-    dropout: 0.2
-    activation: "ReLU"
+    hidden_channels: 80 # ([this > num_classes] && [this * (1 - dropout) ~= num_classes])
+    dropout: 0.8
+    activation: "Hardswish"
   backbone:
-    type: 'mnv4' # 'resnet' or 'mnv4' or 'mnv3' or 'mobilevitv3_v1' 'mobilevitv3_v2', or 'vgg' or 'colornet'
+    type: 'mnv3' # 'resnet' or 'mnv4' or 'mnv3' or 'mobilevitv3_v1' 'mobilevitv3_v2', or 'vgg' or 'colornet'
     ResNet:
       input_channels: 3
-      width_mult: 1.0
+      width_mult: 0.5
       out_stage: 4 # [1,4]
       activation: ReLU # ReLU, LeakyReLU, GELU, SiLU, Hardswish, Tanh, Identity
     MobileNetV4:
@@ -29,7 +30,8 @@ model:
       out_stage: 5
       activation: "ReLU"
     MobileNetV3:
-      input_channels: 3
+      in_chans: 3
+      channel_multiplier: 1.0
       block_size: "large"
     MobileViTv3_v1:
       input_channels: 3
@@ -50,55 +52,78 @@ model:
 datasets:
   train: /home/projects/urban-watch/klass/datasets/vbsr/imgs_train
   val: /home/projects/urban-watch/klass/datasets/vbsr/imgs_val
+  calib: /home/projects/urban-watch/klass/datasets/vbsr/calibration
 
 train:
-  batch_size: 270 # 400, input batch size
-  workers: 8 # number of data loading workers
+  batch_size: 32 #500
+  workers: -1 # number of data loading workers
   epochs: 300000 # number of epochs to train for
-  grad_clip: 0.0
-  l2_lambda: 0.0 # L2 regul (0 to disable)
+  grad_clip: 5.0
+  l2_lambda: 1.0e-3 # L2 regul (0 to disable)
   loss: # focal loss
-    alpha: 0.25 #0.25
-    gamma: 2.0 # 2.0
+    alpha: 0.25
+    gamma: 2.0
     label_smoothing: 0.0
   lr_scheduler:
-    patience: 10 
-    step_size: 1
-    gamma: 5.0e-1
+    name: ExponentialLR
+    patience: 3
+    ExponentialLR:
+      gamma: 0.94
+    StepLR:
+      gamma: 0.94
+      step_size: 1
   optimizer: 
-    name: adam # adadelta or adam or sgd
-    adadelta:
+    name: Adagrad
+    Adadelta:
       lr: 1.0e-0
-      rho: 0.95 # decay rate rho for Adadelta
-      eps: 1.0e-8
-    adam:
+      rho: 0.95
+    Adam:
       lr: 1.0e-3
-      beta1: 0.9
-    sgd:
+      betas: [0.9, 0.999]
+    AdamW:
+      lr: 1.0e-3
+      betas: [0.9, 0.999]
+      amsgrad: False
+      weight_decay: 1.0e-2
+    SGD:
       lr: 1.0e-3
       momentum: 0.9
-      nesterov: True
+      nesterov: False
+      weight_decay: 0
+    RMSprop:
+      lr: 1.0e-3
+      momentum: 0.9
+      weight_decay: 1.0e-2
+    Adagrad:
+      lr: 1.0e-3
+
 
 augment:
   enabled: True
   warp:
-    perspective: 0.05 # factor
-    scale: [0.8, 1.2] # ratio, e.g. [0.6, 1.4]
-    stretch: [[0.8, 1.2], [0.8, 1.2]] # ratio, e.g. [0.6, 1.4]
-    rotation: 20.0 # degrees
-    shear: [5.0, 5.0] # degrees
-    translate: 0.2 # ratio
+    perspective: 0.0 # factor
+    scale: [1.0, 1.0] # ratio, e.g. [0.6, 1.4]
+    stretch: [[1.0, 1.0], [1.0, 1.0]] # ratio, e.g. [0.6, 1.4]
+    rotation: 10.0 # degrees
+    shear: [10.0, 10.0] # degrees
+    translate: 0.1 # ratio
     flip: 0.5 # probability
     crop: 0.1 # ratio
-    random_border_color: True
+    border_reflect: False
   texture:
     per_channel: True
-    gaussian_blur: [0.0, 2.0] # e.g. [0.0, 2.0]
+    grayscale: 0.5 # probability
+    average_blur: [3, 9]
+    gaussian_blur: [0.0, 3.0]
+    motion_blur: [15, -45, 45]
     multiply: [0.5, 1.5]
     multiply_hue: [0.5, 1.5]
     multiply_saturation: [0.5, 1.5]
     gamma_contrast: [0.5, 2.0]
-    additive_gaussian_noise: 5.0
+    sigmoid_contrast: [3, 10, 0.4, 0.6]
+    log_contrast: [0.6, 1.4]
+    linear_contrast: [0.5, 1.5]
+    emboss: [0, 1.0, 0, 2.0]
+    additive_gaussian_noise: 10.0
     salt: 0.02
     pepper: 0.02
-    grayscale: 0.0 # probability

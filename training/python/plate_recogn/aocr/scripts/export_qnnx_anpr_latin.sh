@@ -1,0 +1,2 @@
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/TensorRT-10.16.1.11/lib \
+python aocr/tools/export_qnnx.py --config configs/config_anpr_latin.yml --weights saved_models/anpr_latin/best_norm_ED.pth --calibration_dataset datasets/latin/calibration/dataset.npy.gz
