@@ -1,4 +1,4 @@
-import torch, argparse, os, onnx, onnxsim
+import torch, argparse, os, onnx, onnxsim, time
 from rknn.api import RKNN
 from aocr.model import AOCR
 from aocr.config import Config
@@ -45,7 +45,7 @@ def main(cfg, args):
     os.chmod(args.out_folder, 0o777)
     
     # Using quantized TFlite models as input doesn't work with RKNN2. That's why we use ONNX.
-    onnx_model_path = os.path.join(args.out_folder, '____model___.onnx')
+    onnx_model_path = os.path.join(args.out_folder, f'____model_{time.time()*1000.0}___.onnx')
     torch.onnx.export(
         model,
         sample_args,

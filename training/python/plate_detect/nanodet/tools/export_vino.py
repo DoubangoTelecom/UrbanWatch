@@ -1,4 +1,4 @@
-import torch, argparse, os, numpy as np, nncf, openvino as ov, onnxsim
+import torch, argparse, os, numpy as np, nncf, openvino as ov, onnxsim, time
 from io import BytesIO
 from nanodet.model.arch import build_model
 from nanodet.data.dataset import build_dataset
@@ -6,7 +6,7 @@ from nanodet.util import Logger, cfg, load_config, load_model_weight
 from export_utils import get_image_list, preprocess_image
 
 BATCH_SIZE = 2 # set to >1 to make it batchy
-ONNX_FILE = '____model___.onnx'
+ONNX_FILE = f'____model_{time.time()*1000.0}___.onnx'
 
 def parse_args():
     parser = argparse.ArgumentParser(

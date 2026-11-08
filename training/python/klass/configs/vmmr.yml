@@ -15,9 +15,9 @@ model:
     fully_connected: False
     hidden_channels: 2800 # ([this > num_classes] && [this * (1 - dropout) ~= num_classes])
     dropout: 0.3
-    activation: "Hardswish"
+    activation: "ReLU"
   backbone:
-    type: 'mnv3' # 'resnet' or 'mnv4' or 'mnv3' or 'vgg' or 'colornet' or efflite or effes
+    type: 'mnv4' # 'resnet' or 'mnv4' or 'mnv3' or 'vgg' or 'colornet' or efflite or effes
     ResNet:
       input_channels: 3
       width_mult: 1.0

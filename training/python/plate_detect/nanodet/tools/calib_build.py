@@ -31,13 +31,13 @@ if __name__ == "__main__":
     with open(dataset_paths, "w") as f:
         for i, path in enumerate(paths):
             print('[{:3d}/{:3d}] Processing {}...'.format(i, len(paths), path))
-            dst_path = os.path.join(args.out_folder, os.path.basename(path))
+            dst_path = os.path.join(args.out_folder, os.path.basename(path).replace(' ', '_')) # rknn doesn't support space in names
             image = Image.open(path) \
                 .convert('RGB') \
                 .resize((args.image_size, args.image_size), Image.BILINEAR)
             image.save(dst_path)
             np.save(f"{dst_path.split('.')[0]}.npy", np.asarray(image).astype(np.float32))
-            f.write(f"{os.path.basename(path)}\n")
+            f.write(f"{os.path.basename(dst_path)}\n")
 
         
     print('!!! DONE !!!')

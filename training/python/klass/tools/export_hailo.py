@@ -1,4 +1,4 @@
-import torch, argparse, os, onnx, onnxsim, shutil
+import torch, argparse, os, onnx, onnxsim, shutil, time
 from klass.model import KlassModel
 from klass.config import Config
 
@@ -37,7 +37,7 @@ def main(cfg, args):
     os.chmod(args.out_folder, 0o777)
     
     # Using quantized TFlite models as input doesn't work with RKNN2. That's why we use ONNX.
-    onnx_model_path = os.path.join(args.out_folder, 'temp.onnx')
+    onnx_model_path = os.path.join(args.out_folder, f'temp_{time.time()*1000.0}.onnx')
     torch.onnx.export(
         model,
         sample_args,
@@ -55,11 +55,11 @@ def main(cfg, args):
     model_script = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../scripts/', f'hailo_{cfg.model.name}.alls')
     platforms = args.platforms.split(',')
     assert len(platforms) > 0, "Empty list of platforms"
-    har_file = os.path.join(args.out_folder, 'temp.har')
     for i, platform in enumerate(platforms):
         print('[{:d}/{:2d}] Processing platform {}'.format(i, len(platforms), platform))
         hailo_folder = os.path.join(args.out_folder, platform)
         model_folder = os.path.join(hailo_folder, f'klass_{cfg.model.name}')
+        har_file = os.path.join(model_folder, 'temp.har')
         os.makedirs(model_folder)
         assert os.system(f'yes n | hailo parser onnx {onnx_model_path} --har-path {har_file} --hw-arch {platform} --input-format input=NCHW') == 0, 'Parser failed'
         assert os.system(f'hailo optimize {har_file} --output-har-path {har_file} --hw-arch {platform} --calib-set-path {args.calibration_dataset} --model-script {model_script}') == 0, 'Optimizer failed'
@@ -69,7 +69,6 @@ def main(cfg, args):
         
     # CleanUp
     os.remove(onnx_model_path)
-    os.remove(har_file)
            
 if __name__ == "__main__":
     print("Execute this file using [hailo] conda env on the RTX4060 machine")

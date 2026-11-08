@@ -61,7 +61,7 @@ if __name__ == "__main__":
                 img = img.convert('L')
                 
             # Write to disk
-            image_name = os.path.basename(path)
+            image_name = os.path.basename(path).replace(' ', '_') # rknn doesn't support space in names
             dst_path = os.path.join(args.out_folder, image_name)
             img.save(dst_path)
             np.save(f"{dst_path.split('.')[0]}.npy", np.asarray(img).astype(np.float32))

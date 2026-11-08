@@ -1,11 +1,11 @@
-import torch, torchvision, argparse, os, numpy as np, nncf, openvino as ov, onnxsim, copy
+import torch, torchvision, argparse, os, time, nncf, openvino as ov, onnxsim, copy
 from io import BytesIO
 from klass.model import KlassModel
 from klass.config import Config
 from klass.dataset import KlassDataset
 
 BATCH_SIZE = 2 # set to >1 to make it batchy
-ONNX_FILE = '____model___.onnx'
+ONNX_FILE = f'____model_{time.time()*1000.0}___.onnx'
           
 def main(cfg, opt):
     # Build Model
