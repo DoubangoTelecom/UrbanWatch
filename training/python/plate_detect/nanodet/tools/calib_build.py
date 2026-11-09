@@ -26,8 +26,6 @@ if __name__ == "__main__":
         paths = paths[:args.num_images]
     
     dataset_paths = os.path.join(args.out_folder, 'dataset.txt') # for RKNN
-    dataset_hailo_folder = os.path.join(args.out_folder, 'hailo') # for Hailo
-    os.makedirs(dataset_hailo_folder)
     with open(dataset_paths, "w") as f:
         for i, path in enumerate(paths):
             print('[{:3d}/{:3d}] Processing {}...'.format(i, len(paths), path))

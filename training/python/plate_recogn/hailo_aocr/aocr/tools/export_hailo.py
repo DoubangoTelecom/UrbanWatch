@@ -39,7 +39,8 @@ def main(cfg, args):
     os.chmod(args.out_folder, 0o777)
     
     # Using quantized TFlite models as input doesn't work with RKNN2. That's why we use ONNX.
-    onnx_model_path = os.path.join(args.out_folder, f'temp_{time.time()*1000.0}.onnx')
+    temp_file_name_woext = f'temp_{time.time()*1000.0}'
+    onnx_model_path = os.path.join(args.out_folder, f'{temp_file_name_woext}.onnx')
     torch.onnx.export(
         model,
         sample_args,
@@ -61,12 +62,12 @@ def main(cfg, args):
         print('[{:d}/{:2d}] Processing platform {}'.format(i, len(platforms), platform))
         hailo_folder = os.path.join(args.out_folder, platform)
         model_folder = os.path.join(hailo_folder, f'aocr_{args.target}')
-        har_file = os.path.join(model_folder, 'temp.har')
+        har_file = os.path.join(model_folder, f'{temp_file_name_woext}.har')
         os.makedirs(model_folder)
         assert os.system(f'yes n | hailo parser onnx {onnx_model_path} --har-path {har_file} --hw-arch {platform} --input-format input=NCHW') == 0, 'Parser failed'
         assert os.system(f'hailo optimize {har_file} --output-har-path {har_file} --hw-arch {platform} --calib-set-path {args.calibration_dataset} --model-script {model_script}') == 0, 'Optimizer failed'
         assert os.system(f'hailo compiler {har_file} --hw-arch {platform} --output-dir {model_folder}') == 0, 'Compiler failed'
-        shutil.move(os.path.join(model_folder, 'temp.hef'), os.path.join(hailo_folder, f'aocr_{args.target}.{platform}'))
+        shutil.move(os.path.join(model_folder, f'{temp_file_name_woext}.hef'), os.path.join(hailo_folder, f'aocr_{args.target}.{platform}'))
         shutil.rmtree(model_folder)
         
     # CleanUp
