@@ -34,12 +34,11 @@ def main(cfg, args):
     sample_args = (torch.randn(BATCH_SIZE, 1 if (cfg.model.chroma == 'gray') else 3, cfg.model.imgH, cfg.model.imgW), )
     
     # Create output folder
-    if not os.path.exists(args.out_folder):
-        os.makedirs(args.out_folder)
+    os.makedirs(args.out_folder,  exist_ok=True)
     os.chmod(args.out_folder, 0o777)
     
     # Using quantized TFlite models as input doesn't work with RKNN2. That's why we use ONNX.
-    temp_file_name_woext = f'temp_{time.time()*1000.0}'
+    temp_file_name_woext = f'temp_{time.time()*1000.0}'.replace('.', '_')
     onnx_model_path = os.path.join(args.out_folder, f'{temp_file_name_woext}.onnx')
     torch.onnx.export(
         model,
@@ -63,7 +62,7 @@ def main(cfg, args):
         hailo_folder = os.path.join(args.out_folder, platform)
         model_folder = os.path.join(hailo_folder, f'klass_{cfg.model.name}')
         har_file = os.path.join(model_folder, f'{temp_file_name_woext}.har')
-        os.makedirs(model_folder)
+        os.makedirs(model_folder, exist_ok=True)
         assert os.system(f'yes n | hailo parser onnx {onnx_model_path} --har-path {har_file} --hw-arch {platform} --input-format input=NCHW') == 0, 'Parser failed'
         assert os.system(f'hailo optimize {har_file} --output-har-path {har_file} --hw-arch {platform} --calib-set-path {args.calibration_dataset} --model-script {model_script}') == 0, 'Optimizer failed'
         assert os.system(f'hailo compiler {har_file} --hw-arch {platform} --output-dir {model_folder}') == 0, 'Compiler failed'
