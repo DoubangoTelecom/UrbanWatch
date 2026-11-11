@@ -15,6 +15,6 @@ class ColorNet(nn.Module):
         self.output_channels = (self.leg0.output_channels + self.leg1.output_channels)
     
     def forward(self, x):
-        r, g, b = x.unbind(1)
-        y = torch.stack([r-g, r-b, g-b, r+g+b], dim=1)
+        r, g, b = x.split(1, 1)
+        y = torch.cat([r-g, r-b, g-b, r+g+b], dim=1)
         return torch.cat([self.leg0(x), self.leg1(y)], dim=1)
